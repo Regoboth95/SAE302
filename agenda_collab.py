@@ -75,6 +75,25 @@ class BaseDeDonnees:
             finally:
                 conn.close()
 
+    def verifier_connexion(self, pseudo, mot_de_passe):
+        """ Vérifie le couple login/mdp et renvoie les infos de l'user """
+        sql = """
+            SELECT id_user, nom, prenom 
+            FROM gestion_agenda.UTILISATEUR 
+            WHERE nom = %s AND mot_de_passe = %s;
+        """
+        conn = self.get_connection()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(sql, (pseudo, mot_de_passe))
+                    return cur.fetchone() # Renvoie (id, nom, prenom) ou None
+            except Exception as e:
+                print(f"Erreur login : {e}")
+            finally:
+                conn.close()
+        return None
+
 # --- EXEMPLE D'UTILISATION (Pour tester) ---
 if __name__ == "__main__":
     bdd = BaseDeDonnees()
