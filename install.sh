@@ -1,87 +1,94 @@
 #!/bin/bash
 
-# --- COULEURS POUR LE TEXTE (Pour faire pro) ---
+# ==============================================================================
+# CONFIGURATION
+# ==============================================================================
+PYTHON_LIBRARIES="flask psycopg2-binary python-dotenv"
+
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+BLUE='\033[0;34m'
+NC='\033[0m'
 
-echo -e "${YELLOW}--- DÉMARRAGE DE L'INSTALLATION DE L'AGENDA COLLABORATIF ---${NC}"
+echo -e "${BLUE}##########################################################${NC}"
+echo -e "${BLUE}#   INSTALLATION (MODE COMPATIBILITÉ IUT SANS SUDO)      #${NC}"
+echo -e "${BLUE}##########################################################${NC}"
 
-# --- 1. VÉRIFICATION DE PYTHON ---
+# --- 1. VÉRIFICATION PYTHON ---
 if ! command -v python3 &> /dev/null; then
-    echo -e "${RED}Erreur : Python3 n'est pas installé.${NC}"
+    echo -e "${RED}❌ Erreur : Python3 n'est pas installé.${NC}"
     exit 1
-else
-    echo -e "${GREEN}✅ Python3 est présent.${NC}"
 fi
 
-# --- 2. TENTATIVE D'INSTALLATION SYSTÈME (Optionnel) ---
-# On essaie d'installer les outils système seulement si l'utilisateur a sudo
-# Si tu es sur un PC IUT sans droits, cette partie sera sautée ou échouera proprement.
-echo -e "${YELLOW}--- Vérification des outils système (PostgreSQL client) ---${NC}"
+# --- 2. TENTATIVE DE CRÉATION DU VENV ---
+echo -e "\n${YELLOW}--- Tentative de création de l'environnement virtuel ---${NC}"
 
-if command -v psql &> /dev/null; then
-    echo -e "${GREEN}✅ Le client PostgreSQL (psql) est déjà installé.${NC}"
-else
-    echo -e "${YELLOW}⚠️ psql n'est pas trouvé. Tentative d'installation (mot de passe sudo requis)...${NC}"
-    # On essaie d'installer sans forcer, si ça échoue on continue quand même pour la partie Python
-    sudo apt-get update && sudo apt-get install -y postgresql-client libpq-dev python3-dev
-    
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✅ Installation système réussie.${NC}"
-    else
-        echo -e "${RED}❌ Échec de l'installation système (Pas de sudo ?).${NC}"
-        echo -e "${YELLOW}👉 Ce n'est pas grave si le serveur PostgreSQL est distant ou déjà installé.${NC}"
-    fi
-fi
-
-# --- 3. CRÉATION DE L'ENVIRONNEMENT VIRTUEL (VENV) ---
-# C'est la partie la plus importante : isole tes libs Python du reste du PC
-echo -e "${YELLOW}--- Configuration de l'environnement Python ---${NC}"
-
-if [ ! -d "venv" ]; then
-    echo "Création du dossier venv..."
-    python3 -m venv venv
-    echo -e "${GREEN}✅ Environnement virtuel créé.${NC}"
-else
-    echo -e "${GREEN}✅ Le dossier venv existe déjà.${NC}"
-fi
-
-# --- 4. ACTIVATION ET INSTALLATION DES LIBS ---
-echo "Activation de l'environnement et installation des dépendances..."
-
-# On active le venv
-source venv/bin/activate
-
-# Mise à jour de pip (le gestionnaire de paquets)
-pip install --upgrade pip
-
-# Installation des bibliothèques nécessaires
-# Flask : Le serveur Web
-# psycopg2-binary : Pour parler à PostgreSQL
-# python-dotenv : Pour gérer les variables d'environnement (optionnel mais utile)
-pip install flask psycopg2-binary
+# On teste si on peut créer un venv
+python3 -m venv venv 2> /dev/null
 
 if [ $? -eq 0 ]; then
-    echo -e "${GREEN}✅ Toutes les bibliothèques Python sont installées !${NC}"
+    # CAS A : Ça marche (votre collègue ou un PC bien configuré)
+    echo -e "${GREEN}✅ Environnement virtuel standard créé.${NC}"
+    MODE="VENV"
 else
-    echo -e "${RED}❌ Erreur lors de l'installation des bibliothèques.${NC}"
+    # CAS B : Ça plante (PC IUT sans python3-venv)
+    echo -e "${RED}⚠️ Impossible de créer un dossier venv (module manquant).${NC}"
+    echo -e "${YELLOW}👉 Passage en mode 'Installation Utilisateur' (Solution de secours)...${NC}"
+    MODE="USER"
+fi
+
+# --- 3. INSTALLATION DES BIBLIOTHÈQUES ---
+echo -e "\n${YELLOW}--- Installation des librairies ($MODE) ---${NC}"
+
+if [ "$MODE" == "VENV" ]; then
+    # Méthode standard
+    source venv/bin/activate
+    pip install --upgrade pip
+    pip install $PYTHON_LIBRARIES
+else
+    # Méthode de secours (Force l'installation dans le dossier perso de l'étudiant)
+    # Le flag --break-system-packages est nécessaire sur les Linux récents
+    pip install --user $PYTHON_LIBRARIES --break-system-packages
+fi
+
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}✅ Bibliothèques installées avec succès !${NC}"
+else
+    echo -e "${RED}❌ Échec de l'installation des bibliothèques.${NC}"
     exit 1
 fi
 
-# --- 5. CRÉATION D'UN FICHIER DE LANCEMENT RAPIDE ---
-# Crée un petit script 'run.sh' pour ne pas avoir à taper les commandes à chaque fois
-echo -e "${YELLOW}--- Création du script de lancement 'run.sh' ---${NC}"
+# --- 4. CRÉATION DU FICHIER DE LANCEMENT ADAPTÉ ---
+echo -e "\n${YELLOW}--- Configuration du lanceur run.sh ---${NC}"
 
+if [ "$MODE" == "VENV" ]; then
+    # Lanceur pour mode Venv
 cat <<EOT > run.sh
 #!/bin/bash
 source venv/bin/activate
-echo "🚀 Lancement du serveur Agenda..."
+echo "🚀 Lancement (Mode VENV)..."
 python3 app.py
 EOT
+else
+    # Lanceur pour mode Utilisateur
+cat <<EOT > run.sh
+#!/bin/bash
+echo "🚀 Lancement (Mode USER)..."
+python3 app.py
+EOT
+fi
 
 chmod +x run.sh
 
-echo -e "${GREEN}✅ Tout est prêt !${NC}"
-echo -e "Pour lancer ton application, tape simplement : ${YELLOW}./run.sh${NC}"
+# --- 5. PROTECTION GIT ---
+if [ ! -f ".gitignore" ]; then
+    echo "venv/" > .gitignore
+    echo "__pycache__/" >> .gitignore
+    echo "*.pyc" >> .gitignore
+    echo ".env" >> .gitignore
+    echo "agenda.db" >> .gitignore
+fi
+
+echo -e "${GREEN}✅ TERMINÉ !${NC}"
+echo -e "👉 Lancez votre site avec : ${YELLOW}./run.sh${NC}"
