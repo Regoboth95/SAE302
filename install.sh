@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-# SCRIPT D'INSTALLATION UNIVERSEL (Compatible Sudo ET Sans-Sudo)
+# INSTALLATION INTERACTIVE (La seule qui marche à coup sûr)
 # ==============================================================================
 
 GREEN='\033[0;32m'
@@ -13,43 +13,50 @@ NC='\033[0m'
 LIBS="flask psycopg2-binary python-dotenv"
 
 echo -e "${BLUE}##########################################################${NC}"
-echo -e "${BLUE}#           INSTALLATION AUTO-ADAPTATIVE                 #${NC}"
+echo -e "${BLUE}#            CONFIGURATION DE L'AGENDA                   #${NC}"
 echo -e "${BLUE}##########################################################${NC}"
 
-# --- ETAPE 1 : GESTION DES DEPENDANCES SYSTEME (POUR CELUI QUI A SUDO) ---
-echo -e "\n${YELLOW}--- 1. Vérification des droits administrateur (Sudo) ---${NC}"
+# --- QUESTION CRUCIALE ---
+echo ""
+echo -e "${YELLOW}Question de configuration :${NC}"
+read -p "Avez-vous le mot de passe administrateur (sudo) sur ce PC ? (o/n) : " REPONSE
 
-# On vérifie si l'utilisateur a accès à sudo sans bloquer le script
-if command -v sudo >/dev/null 2>&1 && sudo -v >/dev/null 2>&1; then
-    echo -e "${GREEN}✅ Droits Sudo détectés (Mode Admin).${NC}"
-    echo "Mise à jour et installation des outils manquants..."
+if [[ "$REPONSE" == "o" || "$REPONSE" == "O" ]]; then
+    MODE_ADMIN=true
+    echo -e "${GREEN}👉 Mode sélectionné : ADMINISTRATEUR (Installation propre)${NC}"
+else
+    MODE_ADMIN=false
+    echo -e "${YELLOW}👉 Mode sélectionné : UTILISATEUR (Installation locale)${NC}"
+fi
+
+# --- ÉTAPE 1 : INSTALLATION SYSTÈME (Seulement si admin) ---
+if [ "$MODE_ADMIN" = true ]; then
+    echo -e "\n${YELLOW}--- 1. Installation des outils système ---${NC}"
+    # On met à jour et on installe le module venv manquant
     sudo apt-get update
     sudo apt-get install -y python3-venv python3-pip python3-dev libpq-dev postgresql-client
 else
-    echo -e "${YELLOW}⚠️ Pas de droits Sudo détectés (Mode Étudiant restreint).${NC}"
-    echo "👉 On saute l'installation système et on passe en mode 'Survie'."
+    echo -e "\n${YELLOW}--- 1. Pas d'installation système (Ignoré) ---${NC}"
 fi
 
-# --- ETAPE 2 : TENTATIVE DE CRÉATION DU VENV ---
-echo -e "\n${YELLOW}--- 2. Configuration de l'environnement Python ---${NC}"
+# --- ÉTAPE 2 : PRÉPARATION PYTHON ---
+echo -e "\n${YELLOW}--- 2. Installation des bibliothèques Python ---${NC}"
 
-# On nettoie
+# Nettoyage
 rm -rf venv
 rm -f run.sh
 
-# On essaie de créer le venv
+# On tente de créer le venv (ça marchera chez le collègue, et peut-être chez vous)
 python3 -m venv venv 2> /dev/null
 
 if [ $? -eq 0 ]; then
-    # --- CAS A : SUCCÈS (Le venv a marché) ---
-    echo -e "${GREEN}✅ Environnement virtuel créé avec succès.${NC}"
-    MODE="VENV"
+    # --- CAS A : VENV DISPONIBLE ---
+    echo -e "${GREEN}✅ Environnement virtuel créé.${NC}"
     
-    # Installation dans le venv
     ./venv/bin/pip install --upgrade pip
     ./venv/bin/pip install $LIBS
     
-    # Création du run.sh pour VENV
+    # Run.sh pour VENV
     cat <<EOT > run.sh
 #!/bin/bash
 source venv/bin/activate
@@ -58,24 +65,20 @@ python3 app.py
 EOT
 
 else
-    # --- CAS B : ÉCHEC (Pas de module venv et pas de sudo) ---
-    echo -e "${RED}⚠️ Impossible de créer le dossier venv.${NC}"
-    echo -e "${YELLOW}👉 Passage automatique en mode 'Installation Utilisateur' (--user).${NC}"
-    MODE="USER"
+    # --- CAS B : PAS DE VENV (Votre cas sur Ubuntu sans sudo) ---
+    echo -e "${YELLOW}⚠️ Module venv absent. Installation directe dans votre dossier.${NC}"
     
-    # Installation locale (dans le dossier perso de l'étudiant)
-    # On teste avec --break-system-packages (pour Debian 12/Ubuntu récents)
+    # On force l'installation locale avec le flag pour les Linux récents
     pip3 install --user $LIBS --break-system-packages > /dev/null 2>&1
     
     if [ $? -ne 0 ]; then
-        # Si ça rate, on tente sans le flag (pour vieux Ubuntu)
+        # Si le flag n'est pas reconnu (vieux Linux), on tente sans
         pip3 install --user $LIBS
     fi
     
-    # Création du run.sh pour USER
+    # Run.sh pour USER
     cat <<EOT > run.sh
 #!/bin/bash
-# On ajoute le chemin local au PATH au cas où
 export PATH=\$PATH:\$HOME/.local/bin
 echo "🚀 Lancement (Mode USER)..."
 python3 app.py
@@ -84,15 +87,13 @@ fi
 
 chmod +x run.sh
 
-# --- ETAPE 3 : FINITION ---
+# --- FINITION ---
 if [ ! -f ".gitignore" ]; then
     echo "venv/" > .gitignore
     echo "__pycache__/" >> .gitignore
     echo "*.pyc" >> .gitignore
-    echo "agenda.db" >> .gitignore
     echo ".env" >> .gitignore
 fi
 
-echo -e "\n${GREEN}✅ INSTALLATION TERMINÉE !${NC}"
-echo -e "Mode utilisé : ${YELLOW}$MODE${NC}"
-echo -e "👉 Lance
+echo -e "\n${GREEN}✅ TERMINE !${NC}"
+echo -e "👉 Lancez le site avec : ${YELLOW}./run.sh${NC}"
