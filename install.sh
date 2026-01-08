@@ -1,9 +1,8 @@
 #!/bin/bash
 
 # ==============================================================================
-# CONFIGURATION
+# INSTALLATION PROPRE AVEC SUDO (Debian 12 / Ubuntu)
 # ==============================================================================
-PYTHON_LIBRARIES="flask psycopg2-binary python-dotenv"
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -12,83 +11,77 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 echo -e "${BLUE}##########################################################${NC}"
-echo -e "${BLUE}#   INSTALLATION (MODE COMPATIBILITÉ IUT SANS SUDO)      #${NC}"
+echo -e "${BLUE}#      INSTALLATION COMPLETE (MODE ADMIN/SUDO)           #${NC}"
 echo -e "${BLUE}##########################################################${NC}"
 
-# --- 1. VÉRIFICATION PYTHON ---
-if ! command -v python3 &> /dev/null; then
-    echo -e "${RED}❌ Erreur : Python3 n'est pas installé.${NC}"
+# 1. Mise à jour et installation des outils système
+# C'est ici que le sudo est utile : on installe le module venv manquant sur Debian
+echo -e "\n${YELLOW}--- 1. Installation des dépendances système (Mot de passe requis) ---${NC}"
+
+sudo apt-get update
+# On installe :
+# - python3-venv : Pour créer l'environnement virtuel (le truc qui manquait)
+# - python3-dev & libpq-dev : Pour compiler psycopg2 correctement
+# - postgresql-client : Pour avoir la commande 'psql'
+sudo apt-get install -y python3-venv python3-pip python3-dev libpq-dev postgresql-client
+
+if [ $? -ne 0 ]; then
+    echo -e "${RED}❌ Erreur lors de l'installation système via apt-get.${NC}"
+    exit 1
+fi
+echo -e "${GREEN}✅ Outils système installés.${NC}"
+
+# 2. Création de l'environnement virtuel (VENV)
+echo -e "\n${YELLOW}--- 2. Création de l'environnement virtuel ---${NC}"
+
+# On supprime l'ancien s'il existe pour repartir à neuf
+rm -rf venv
+
+# Maintenant que python3-venv est installé par apt, cette commande va marcher !
+python3 -m venv venv
+
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}✅ Dossier venv créé avec succès.${NC}"
+else
+    echo -e "${RED}❌ Erreur lors de la création du venv.${NC}"
     exit 1
 fi
 
-# --- 2. TENTATIVE DE CRÉATION DU VENV ---
-echo -e "\n${YELLOW}--- Tentative de création de l'environnement virtuel ---${NC}"
+# 3. Installation des librairies Python DANS le venv
+echo -e "\n${YELLOW}--- 3. Installation des librairies Python ---${NC}"
 
-# On teste si on peut créer un venv
-python3 -m venv venv 2> /dev/null
-
-if [ $? -eq 0 ]; then
-    # CAS A : Ça marche (votre collègue ou un PC bien configuré)
-    echo -e "${GREEN}✅ Environnement virtuel standard créé.${NC}"
-    MODE="VENV"
-else
-    # CAS B : Ça plante (PC IUT sans python3-venv)
-    echo -e "${RED}⚠️ Impossible de créer un dossier venv (module manquant).${NC}"
-    echo -e "${YELLOW}👉 Passage en mode 'Installation Utilisateur' (Solution de secours)...${NC}"
-    MODE="USER"
-fi
-
-# --- 3. INSTALLATION DES BIBLIOTHÈQUES ---
-echo -e "\n${YELLOW}--- Installation des librairies ($MODE) ---${NC}"
-
-if [ "$MODE" == "VENV" ]; then
-    # Méthode standard
-    source venv/bin/activate
-    pip install --upgrade pip
-    pip install $PYTHON_LIBRARIES
-else
-    # Méthode de secours (Force l'installation dans le dossier perso de l'étudiant)
-    # Le flag --break-system-packages est nécessaire sur les Linux récents
-    pip install --user $PYTHON_LIBRARIES --break-system-packages
-fi
+# On utilise le pip qui est DANS le dossier venv
+./venv/bin/pip install --upgrade pip
+./venv/bin/pip install flask psycopg2-binary python-dotenv
 
 if [ $? -eq 0 ]; then
-    echo -e "${GREEN}✅ Bibliothèques installées avec succès !${NC}"
+    echo -e "${GREEN}✅ Flask et Psycopg2 installés dans l'environnement virtuel.${NC}"
 else
-    echo -e "${RED}❌ Échec de l'installation des bibliothèques.${NC}"
+    echo -e "${RED}❌ Erreur pip.${NC}"
     exit 1
 fi
 
-# --- 4. CRÉATION DU FICHIER DE LANCEMENT ADAPTÉ ---
-echo -e "\n${YELLOW}--- Configuration du lanceur run.sh ---${NC}"
+# 4. Création du lanceur
+echo -e "\n${YELLOW}--- 4. Configuration du démarrage ---${NC}"
 
-if [ "$MODE" == "VENV" ]; then
-    # Lanceur pour mode Venv
 cat <<EOT > run.sh
 #!/bin/bash
+# Active l'environnement virtuel et lance le serveur
 source venv/bin/activate
-echo "🚀 Lancement (Mode VENV)..."
+echo "🚀 Lancement du serveur Agenda..."
 python3 app.py
 EOT
-else
-    # Lanceur pour mode Utilisateur
-cat <<EOT > run.sh
-#!/bin/bash
-echo "🚀 Lancement (Mode USER)..."
-python3 app.py
-EOT
-fi
 
 chmod +x run.sh
 
-# --- 5. PROTECTION GIT ---
+# 5. Gitignore
 if [ ! -f ".gitignore" ]; then
     echo "venv/" > .gitignore
     echo "__pycache__/" >> .gitignore
     echo "*.pyc" >> .gitignore
-    echo ".env" >> .gitignore
     echo "agenda.db" >> .gitignore
+    echo ".env" >> .gitignore
 fi
 
 echo -e "${GREEN}✅ TERMINÉ !${NC}"
-echo -e "👉 Lancez votre site avec : ${YELLOW}./run.sh${NC}"
+echo -e "👉 Lance ton projet avec : ${YELLOW}./run.sh${NC}"
