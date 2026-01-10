@@ -156,4 +156,28 @@ class BaseDeDonnees:
         if conn:
             try:
                 with conn:
-                    with conn.cursor()
+                    with conn.cursor() as cur:
+                        cur.execute(sql, (titre, desc, debut, fin, id_agenda, id_equipe, id_createur))
+            except Exception as e:
+                print(f"Erreur ajout événement : {e}")
+            finally:
+                conn.close()
+
+    def recuperer_evenements(self, id_agenda):
+        """ Récupère les événements pour le calendrier """
+        sql = """
+            SELECT E.id_event, E.titre, E.date_debut, E.date_fin, EQ.nom_equipe, EQ.couleur_equipe, E.description
+            FROM gestion_agenda.EVENEMENT E
+            LEFT JOIN gestion_agenda.EQUIPE EQ ON E.id_equipe_concernee = EQ.id_equipe
+            WHERE E.id_agenda = %s
+            ORDER BY E.date_debut ASC;
+        """
+        conn = self.get_connection()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(sql, (id_agenda,))
+                    return cur.fetchall()
+            finally:
+                conn.close()
+        return []
