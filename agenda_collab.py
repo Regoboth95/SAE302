@@ -255,3 +255,20 @@ class BaseDeDonnees:
             finally:
                 conn.close()
         return []
+        
+    # --- DRAG & DROP (Mise à jour des dates) ---
+    def modifier_dates_evenement(self, id_event, nouv_debut, nouv_fin):
+        """ Met à jour les dates suite à un Drag & Drop """
+        sql = "UPDATE gestion_agenda.EVENEMENT SET date_debut = %s, date_fin = %s WHERE id_event = %s;"
+        conn = self.get_connection()
+        if conn:
+            try:
+                with conn:
+                    with conn.cursor() as cur:
+                        cur.execute(sql, (nouv_debut, nouv_fin, id_event))
+                        return True
+            except Exception as e:
+                print(f"Erreur update drag&drop : {e}")
+            finally:
+                conn.close()
+        return False
