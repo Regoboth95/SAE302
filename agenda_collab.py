@@ -90,6 +90,43 @@ class BaseDeDonnees:
             finally:
                 conn.close()
         return None
+        
+    def creer_agenda(self, nom_agenda, id_createur):
+        """ Crée un agenda et définit le créateur comme Administrateur """
+        sql_agenda = """
+            INSERT INTO gestion_agenda.AGENDA (nom_agenda, id_createur) 
+            VALUES (%s, %s) 
+            RETURNING id_agenda;
+        """
+        sql_role = "SELECT id_role FROM gestion_agenda.ROLE WHERE libelle = 'Administrateur';"
+        sql_participation = """
+            INSERT INTO gestion_agenda.PARTICIPATION (id_user, id_agenda, id_role) 
+            VALUES (%s, %s, %s);
+        """
+
+        conn = self.get_connection()
+        if conn:
+            try:
+                with conn:
+                    with conn.cursor() as cur:
+                        # 1. On crée l'agenda
+                        cur.execute(sql_agenda, (nom_agenda, id_createur))
+                        id_agenda = cur.fetchone()[0]
+
+                        # 2. On récupère l'ID du rôle "Administrateur"
+                        cur.execute(sql_role)
+                        id_admin = cur.fetchone()[0]
+
+                        # 3. On lie l'utilisateur à l'agenda avec ce rôle
+                        cur.execute(sql_participation, (id_createur, id_agenda, id_admin))
+                        
+                        # Le 'with conn' fait le commit() automatiquement ici
+                        return id_agenda
+            except Exception as e:
+                print(f"Erreur création agenda : {e}")
+            finally:
+                conn.close()
+        return None
 
 # --- EXEMPLE D'UTILISATION (Pour tester) ---
 if __name__ == "__main__":

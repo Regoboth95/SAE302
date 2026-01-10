@@ -55,6 +55,23 @@ def register():
 def logout():
     session.clear()
     return redirect(url_for('login'))
+    
+@app.route('/nouveau_agenda', methods=['POST'])
+def nouveau_agenda():
+    # 1. Vérifier si on est connecté
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+        
+    # 2. Récupérer le nom écrit dans le formulaire
+    nom = request.form['nom_agenda']
+    
+    # 3. Appeler la BDD pour créer l'agenda
+    # (Cette méthode doit exister dans agenda_collab.py)
+    bdd.creer_agenda(nom, session['user_id'])
+    
+    # 4. Revenir au dashboard
+    flash("Agenda créé avec succès !")
+    return redirect(url_for('index'))
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
