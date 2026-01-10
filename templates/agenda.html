@@ -149,22 +149,41 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
-    <script>
+<script>
         document.addEventListener('DOMContentLoaded', function() {
             var calendarEl = document.getElementById('calendar');
-            var agendaId = {{ id_agenda }}; // ID passé par Flask
+            var agendaId = {{ id_agenda }}; 
 
             var calendar = new FullCalendar.Calendar(calendarEl, {
-                initialView: 'timeGridWeek', // Vue Semaine par défaut
-                locale: 'fr', // En français
+                initialView: 'timeGridWeek', 
+                locale: 'fr',
                 headerToolbar: {
                     left: 'prev,next today',
                     center: 'title',
                     right: 'dayGridMonth,timeGridWeek,timeGridDay'
                 },
-                events: '/api/events/' + agendaId, // Chargement JSON depuis Flask
-                editable: true, // Active le Drag & Drop globalement (contrôlé par event ensuite)
+                events: '/api/events/' + agendaId,
+                editable: true,
+                droppable: true, // Autorise le drop
                 
+                // --- REGLE D'OR : INTERDICTION DE SUPERPOSER LA MEME EQUIPE ---
+                eventOverlap: function(stillEvent, movingEvent) {
+                    // stillEvent = celui qui est dessous
+                    // movingEvent = celui qu'on déplace
+                    
+                    // On récupère le nom de l'équipe stocké dans 'extendedProps'
+                    var equipeDessous = stillEvent.extendedProps.equipe;
+                    var equipeDessus = movingEvent.extendedProps.equipe;
+
+                    // Si c'est la même équipe, on INTERDIT (return false)
+                    // Si équipes différentes (ou Général), on AUTORISE (return true)
+                    if (equipeDessous === equipeDessus && equipeDessous !== 'Général') {
+                        return false; 
+                    }
+                    return true;
+                },
+                // -------------------------------------------------------------
+
                 // QUAND ON LÂCHE UN ÉVÉNEMENT
                 eventDrop: function(info) {
                     var eventData = {
@@ -173,7 +192,6 @@
                         end: info.event.end ? info.event.end.toISOString() : info.event.start.toISOString()
                     };
 
-                    // Envoi au serveur Python
                     fetch('/api/move_event', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -182,10 +200,35 @@
                     .then(response => response.json())
                     .then(data => {
                         if (data.status === 'ok') {
-                            console.log('Déplacement sauvegardé !');
+                            console.log('Déplacement sauvegardé.');
+                        } else if (data.status === 'conflict') {
+                            alert('⛔ CONFLIT : ' + data.message);
+                            info.revert(); // Annule le mouvement
                         } else {
-                            alert('Erreur lors du déplacement (Conflit ou Permissions).');
-                            info.revert(); // Annule le mouvement visuellement
+                            alert('Erreur technique.');
+                            info.revert();
+                        }
+                    });
+                },
+                
+                // Gère aussi le redimensionnement (étirer le ticket vers le bas)
+                eventResize: function(info) {
+                    // On réutilise la même logique que le Drop
+                    var eventData = {
+                        id: info.event.id,
+                        start: info.event.start.toISOString(),
+                        end: info.event.end.toISOString()
+                    };
+                    fetch('/api/move_event', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(eventData)
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        if(data.status !== 'ok') { 
+                            alert('Conflit ou Erreur'); 
+                            info.revert(); 
                         }
                     });
                 }

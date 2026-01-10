@@ -256,19 +256,47 @@ class BaseDeDonnees:
                 conn.close()
         return []
         
-    # --- DRAG & DROP (Mise à jour des dates) ---
+# --- DRAG & DROP INTELLIGENT ---
     def modifier_dates_evenement(self, id_event, nouv_debut, nouv_fin):
-        """ Met à jour les dates suite à un Drag & Drop """
-        sql = "UPDATE gestion_agenda.EVENEMENT SET date_debut = %s, date_fin = %s WHERE id_event = %s;"
+        """ 
+        Met à jour les dates avec vérification des conflits.
+        Renvoie "OK", "Conflit", ou "Erreur".
+        """
         conn = self.get_connection()
         if conn:
             try:
                 with conn:
                     with conn.cursor() as cur:
-                        cur.execute(sql, (nouv_debut, nouv_fin, id_event))
-                        return True
+                        # 1. On récupère les infos de l'événement qu'on déplace (Agenda + Equipe)
+                        cur.execute("SELECT id_agenda, id_equipe_concernee FROM gestion_agenda.EVENEMENT WHERE id_event = %s", (id_event,))
+                        info = cur.fetchone()
+                        if not info: return "Erreur"
+                        
+                        id_agenda, id_equipe = info
+
+                        # 2. Si l'événement est lié à une équipe, on vérifie les conflits
+                        # (On exclut l'événement lui-même avec "AND id_event != %s")
+                        if id_equipe is not None:
+                            sql_check = """
+                                SELECT count(*) FROM gestion_agenda.EVENEMENT
+                                WHERE id_agenda = %s AND id_equipe_concernee = %s
+                                AND id_event != %s 
+                                AND (
+                                    (date_debut < %s AND date_fin > %s) -- Chevauchement strict
+                                );
+                            """
+                            # Note: FullCalendar envoie des bornes parfois exclusives, on simplifie la logique
+                            cur.execute(sql_check, (id_agenda, id_equipe, id_event, nouv_fin, nouv_debut))
+                            if cur.fetchone()[0] > 0:
+                                return "Conflit"
+
+                        # 3. Si tout est bon, on met à jour
+                        sql_update = "UPDATE gestion_agenda.EVENEMENT SET date_debut = %s, date_fin = %s WHERE id_event = %s;"
+                        cur.execute(sql_update, (nouv_debut, nouv_fin, id_event))
+                        return "OK"
             except Exception as e:
                 print(f"Erreur update drag&drop : {e}")
+                return "Erreur"
             finally:
                 conn.close()
-        return False
+        return "Erreur"

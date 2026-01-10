@@ -22,7 +22,8 @@ def login():
             session['user_id'] = user[0]
             session['pseudo'] = user[1]
             return redirect(url_for('index'))
-        else: flash("Identifiants incorrects")
+        else:
+            flash("Identifiants incorrects")
     return render_template('login.html', mode='login')
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -148,12 +149,8 @@ def api_get_events(id_agenda):
             is_editable = True
         elif role == 'Chef d\'équipe':
             # Le chef peut bouger SI le ticket appartient à SON équipe
-            # On doit retrouver l'ID équipe du ticket.
-            # Petite astuce : la couleur est unique par équipe, ou on check si c'est pas NULL
+            # Petite astuce : la couleur est unique par équipe
             if ev[5]: # Si le ticket a une couleur (donc une équipe)
-                # Note: Pour être 100% précis il faudrait l'ID équipe dans la requête SQL recuperer_evenements_filtres
-                # Mais ici on va dire : si c'est affiché et que je suis chef, je peux edit sauf si c'est général.
-                # Amélioration simple : Le chef edit tout ce qu'il voit (son équipe)
                 is_editable = True 
         
         json_events.append({
@@ -179,15 +176,17 @@ def api_move_event():
     
     data = request.json
     id_event = data['id']
-    # FullCalendar envoie des dates ISO avec Timezone, on coupe pour faire simple
+    # Nettoyage des formats ISO de FullCalendar
     start = data['start'].replace('T', ' ')[:16] 
-    end = data['end'].replace('T', ' ')[:16] if data['end'] else start # Parfois end est null si durée par défaut
+    end = data['end'].replace('T', ' ')[:16] if data['end'] else start
 
-    # Sauvegarde BDD
-    success = bdd.modifier_dates_evenement(id_event, start, end)
+    # Appel BDD avec vérification conflit
+    resultat = bdd.modifier_dates_evenement(id_event, start, end)
     
-    if success:
+    if resultat == "OK":
         return jsonify({'status': 'ok'})
+    elif resultat == "Conflit":
+        return jsonify({'status': 'conflict', 'message': 'L\'équipe est déjà occupée sur ce créneau.'})
     else:
         return jsonify({'status': 'error'})
 
