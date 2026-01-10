@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Agenda Collaboratif</title>
+    <title>Agenda & Équipes</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -10,12 +10,17 @@
 <body>
     <div class="container-fluid mt-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <a href="{{ url_for('index') }}" class="btn btn-secondary">
-                <i class="fas fa-arrow-left"></i> Dashboard
-            </a>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Retour</a>
             <div>
-                <h4 class="text-primary d-inline"><i class="fas fa-calendar-alt"></i> Agenda</h4>
-                <span class="badge bg-dark ms-2">{{ mon_role }}</span>
+                <h4 class="d-inline text-primary">Agenda</h4>
+                <span class="badge bg-dark ms-2">{{ mon_info['role'] }}</span>
+                {% if mon_info['id_equipe'] %}
+                    {% for eq in equipes %}
+                        {% if eq[0] == mon_info['id_equipe'] %}
+                        <span class="badge" style="background-color: {{ eq[2] }};">{{ eq[1] }}</span>
+                        {% endif %}
+                    {% endfor %}
+                {% endif %}
             </div>
         </div>
         
@@ -31,22 +36,21 @@
         <div class="row">
             <div class="col-md-3 border-end">
                 
-                <h5 class="text-primary border-bottom pb-2">Les Équipes</h5>
+                <h5 class="text-primary border-bottom pb-2">Équipes</h5>
                 <ul class="list-group mb-3">
                     {% for eq in equipes %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center" 
-                            style="border-left: 5px solid {{ eq[2] }};">
+                        <li class="list-group-item d-flex justify-content-between align-items-center" style="border-left: 5px solid {{ eq[2] }};">
                             <span class="fw-bold">{{ eq[1] }}</span>
                         </li>
                     {% else %}
                         <li class="list-group-item text-muted small">Aucune équipe.</li>
                     {% endfor %}
                 </ul>
-                
-                {% if mon_role == 'Administrateur' %}
+
+                {% if mon_info['role'] == 'Administrateur' %}
                 <form action="{{ url_for('nouvelle_equipe', id_agenda=id_agenda) }}" method="POST" class="mb-4">
                     <div class="input-group input-group-sm">
-                        <input type="text" name="nom_equipe" class="form-control" placeholder="Nom équipe" required>
+                        <input type="text" name="nom_equipe" class="form-control" placeholder="Nom..." required>
                         <input type="color" name="couleur_equipe" class="form-control form-control-color" value="#0d6efd">
                         <button class="btn btn-outline-primary" type="submit">+</button>
                     </div>
@@ -56,26 +60,32 @@
                 <h5 class="text-success border-bottom pb-2 mt-4">Membres</h5>
                 <ul class="list-group list-group-flush mb-3">
                     {% for m in membres %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                            <span><i class="fas fa-user text-secondary"></i> {{ m[0] }}</span>
-                            <span class="badge bg-light text-dark border">{{ m[1] }}</span>
+                        <li class="list-group-item px-0">
+                            <div class="d-flex justify-content-between">
+                                <span><i class="fas fa-user text-secondary"></i> {{ m[0] }}</span>
+                                <span class="badge bg-light text-dark border">{{ m[1] }}</span>
+                            </div>
+                            {% if m[2] %}
+                                <div class="small text-end mt-1" style="color: {{ m[3] }}">
+                                    <i class="fas fa-users"></i> {{ m[2] }}
+                                </div>
+                            {% endif %}
                         </li>
                     {% endfor %}
                 </ul>
-                
-                {% if mon_role == 'Administrateur' %}
+
+                {% if mon_info['role'] in ['Administrateur', 'Chef d\'équipe'] %}
                 <button class="btn btn-sm btn-outline-success w-100" data-bs-toggle="modal" data-bs-target="#modalInvite">
                     <i class="fas fa-user-plus"></i> Inviter un membre
                 </button>
                 {% endif %}
-
             </div>
 
             <div class="col-md-9">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h3>Planning</h3>
+                    <h3>Planning {% if mon_info['role'] != 'Administrateur' %}(Filtré){% endif %}</h3>
                     
-                    {% if mon_role != 'Collaborateur' %}
+                    {% if mon_info['role'] != 'Collaborateur' %}
                     <button class="btn btn-success shadow-sm" data-bs-toggle="modal" data-bs-target="#modalEvent">
                         <i class="fas fa-calendar-plus"></i> Nouvel Événement
                     </button>
@@ -99,7 +109,9 @@
                         <p class="mb-1 ms-1 text-secondary">{{ ev[6] }}</p>
                     </div>
                     {% else %}
-                        <div class="alert alert-info text-center py-5">Aucun événement planifié.</div>
+                        <div class="alert alert-warning text-center">
+                            Aucun événement visible pour votre équipe.
+                        </div>
                     {% endfor %}
                 </div>
             </div>
@@ -110,7 +122,7 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header bg-success text-white">
-                    <h5 class="modal-title">Inviter</h5>
+                    <h5 class="modal-title">Inviter un utilisateur</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <form action="{{ url_for('inviter_membre', id_agenda=id_agenda) }}" method="POST">
@@ -124,9 +136,26 @@
                             <select name="role_invite" class="form-select">
                                 <option value="Collaborateur">Collaborateur</option>
                                 <option value="Chef d'équipe">Chef d'équipe</option>
+                                {% if mon_info['role'] == 'Administrateur' %}
                                 <option value="Administrateur">Administrateur</option>
+                                {% endif %}
                             </select>
                         </div>
+                        
+                        {% if mon_info['role'] == 'Administrateur' %}
+                        <div class="mb-3">
+                            <label>Affecter à l'équipe</label>
+                            <select name="equipe_invite" class="form-select">
+                                <option value="">-- Aucune (Pour Admin) --</option>
+                                {% for eq in equipes %}
+                                    <option value="{{ eq[0] }}">{{ eq[1] }}</option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-muted">Obligatoire pour Chef et Collab.</small>
+                        </div>
+                        {% else %}
+                            <p class="text-muted small"><i class="fas fa-info-circle"></i> L'utilisateur sera ajouté à votre équipe automatiquement.</p>
+                        {% endif %}
                     </div>
                     <div class="modal-footer">
                         <button type="submit" class="btn btn-success">Inviter</button>
@@ -140,7 +169,7 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title">Placer un événement</h5>
+                    <h5 class="modal-title">Nouvel Événement</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <form action="{{ url_for('nouvel_evenement', id_agenda=id_agenda) }}" method="POST">
@@ -159,15 +188,22 @@
                                 <input type="datetime-local" name="date_fin" class="form-control" required>
                             </div>
                         </div>
+
                         <div class="mb-3">
-                            <label>Équipe</label>
-                            <select name="id_equipe" class="form-select">
-                                <option value="">-- Aucun --</option>
-                                {% for eq in equipes %}
-                                    <option value="{{ eq[0] }}">{{ eq[1] }}</option>
-                                {% endfor %}
-                            </select>
+                            <label>Concerne l'équipe</label>
+                            {% if mon_info['role'] == 'Administrateur' %}
+                                <select name="id_equipe" class="form-select">
+                                    <option value="">-- Événement Général --</option>
+                                    {% for eq in equipes %}
+                                        <option value="{{ eq[0] }}">{{ eq[1] }}</option>
+                                    {% endfor %}
+                                </select>
+                            {% else %}
+                                <input type="text" class="form-control" value="Mon équipe (Auto)" disabled>
+                                <small class="text-muted">L'événement sera lié à votre équipe.</small>
+                            {% endif %}
                         </div>
+
                         <div class="mb-3">
                             <label>Description</label>
                             <textarea name="description" class="form-control"></textarea>
@@ -180,6 +216,7 @@
             </div>
         </div>
     </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

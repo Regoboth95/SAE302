@@ -3,7 +3,6 @@ from psycopg2 import OperationalError
 
 class BaseDeDonnees:
     def __init__(self):
-        # Configuration BDD
         self.db_config = {
             "host": "localhost",
             "port": 5432,
@@ -14,10 +13,9 @@ class BaseDeDonnees:
 
     def get_connection(self):
         try:
-            conn = psycopg2.connect(**self.db_config)
-            return conn
+            return psycopg2.connect(**self.db_config)
         except OperationalError as e:
-            print(f"❌ Erreur de connexion BDD : {e}")
+            print(f"❌ Erreur BDD : {e}")
             return None
 
     # --- UTILISATEURS ---
@@ -29,8 +27,7 @@ class BaseDeDonnees:
                 with conn.cursor() as cur:
                     cur.execute(sql, (pseudo,))
                     user = cur.fetchone()
-                    if user and user[3] == password:
-                        return user
+                    if user and user[3] == password: return user
             finally:
                 conn.close()
         return None
@@ -44,13 +41,12 @@ class BaseDeDonnees:
                     with conn.cursor() as cur:
                         cur.execute(sql, (nom, prenom, mdp))
                         return cur.fetchone()[0]
-            except:
-                pass
+            except: pass
             finally:
                 conn.close()
         return None
 
-    # --- AGENDAS & PARTICIPANTS ---
+    # --- AGENDAS & PARTICIPATION ---
     def recuperer_agendas_utilisateur(self, id_user):
         sql = """
             SELECT A.nom_agenda, R.libelle, A.id_agenda
@@ -75,38 +71,40 @@ class BaseDeDonnees:
             try:
                 with conn:
                     with conn.cursor() as cur:
-                        # Créer agenda
                         cur.execute("INSERT INTO gestion_agenda.AGENDA (nom_agenda, id_createur) VALUES (%s, %s) RETURNING id_agenda;", (nom_agenda, id_createur))
                         new_id = cur.fetchone()[0]
-                        # Récupérer id rôle Admin
                         cur.execute("SELECT id_role FROM gestion_agenda.ROLE WHERE libelle = 'Administrateur'")
                         id_role = cur.fetchone()[0]
-                        # Lier
-                        cur.execute("INSERT INTO gestion_agenda.PARTICIPATION (id_user, id_agenda, id_role) VALUES (%s, %s, %s);", (id_createur, new_id, id_role))
+                        # L'admin n'a pas d'équipe spécifique (NULL), il voit tout
+                        cur.execute("INSERT INTO gestion_agenda.PARTICIPATION (id_user, id_agenda, id_role, id_equipe) VALUES (%s, %s, %s, NULL);", (id_createur, new_id, id_role))
                         return new_id
             finally:
                 conn.close()
         return None
 
-    def recuperer_participants(self, id_agenda):
+    # --- NOYAU DE SÉCURITÉ & VISIBILITÉ ---
+    def recuperer_infos_membre(self, id_user, id_agenda):
+        """ Renvoie un dict : {'role': '...', 'id_equipe': 12} """
         sql = """
-            SELECT U.nom, R.libelle 
+            SELECT R.libelle, P.id_equipe
             FROM gestion_agenda.PARTICIPATION P
-            JOIN gestion_agenda.UTILISATEUR U ON P.id_user = U.id_user
             JOIN gestion_agenda.ROLE R ON P.id_role = R.id_role
-            WHERE P.id_agenda = %s;
+            WHERE P.id_user = %s AND P.id_agenda = %s;
         """
         conn = self.get_connection()
         if conn:
             try:
                 with conn.cursor() as cur:
-                    cur.execute(sql, (id_agenda,))
-                    return cur.fetchall()
+                    cur.execute(sql, (id_user, id_agenda))
+                    res = cur.fetchone()
+                    if res:
+                        return {'role': res[0], 'id_equipe': res[1]}
             finally:
                 conn.close()
-        return []
+        return None
 
-    def ajouter_membre(self, id_agenda, pseudo_invite, role_choisi):
+    def ajouter_membre(self, id_agenda, pseudo_invite, role_choisi, id_equipe):
+        """ Invite un utilisateur et L'ASSIGNE A UNE EQUIPE """
         conn = self.get_connection()
         if conn:
             try:
@@ -125,7 +123,9 @@ class BaseDeDonnees:
                         cur.execute("SELECT * FROM gestion_agenda.PARTICIPATION WHERE id_user=%s AND id_agenda=%s", (id_invite, id_agenda))
                         if cur.fetchone(): return "DejaMembre"
 
-                        cur.execute("INSERT INTO gestion_agenda.PARTICIPATION (id_user, id_agenda, id_role) VALUES (%s, %s, %s)", (id_invite, id_agenda, id_role))
+                        # Insertion avec l'équipe !
+                        sql = "INSERT INTO gestion_agenda.PARTICIPATION (id_user, id_agenda, id_role, id_equipe) VALUES (%s, %s, %s, %s)"
+                        cur.execute(sql, (id_invite, id_agenda, id_role, id_equipe))
                         return "OK"
             except Exception as e:
                 print(e)
@@ -134,25 +134,25 @@ class BaseDeDonnees:
                 conn.close()
         return "ErreurConnexion"
 
-    # --- PERMISSIONS (NOUVEAU) ---
-    def recuperer_role_user(self, id_user, id_agenda):
-        """ Récupère le rôle (ex: 'Collaborateur') de l'utilisateur connecté """
+    def recuperer_participants(self, id_agenda):
+        # On récupère aussi le nom de l'équipe du membre
         sql = """
-            SELECT R.libelle 
+            SELECT U.nom, R.libelle, E.nom_equipe, E.couleur_equipe
             FROM gestion_agenda.PARTICIPATION P
+            JOIN gestion_agenda.UTILISATEUR U ON P.id_user = U.id_user
             JOIN gestion_agenda.ROLE R ON P.id_role = R.id_role
-            WHERE P.id_user = %s AND P.id_agenda = %s;
+            LEFT JOIN gestion_agenda.EQUIPE E ON P.id_equipe = E.id_equipe
+            WHERE P.id_agenda = %s;
         """
         conn = self.get_connection()
         if conn:
             try:
                 with conn.cursor() as cur:
-                    cur.execute(sql, (id_user, id_agenda))
-                    res = cur.fetchone()
-                    return res[0] if res else None
+                    cur.execute(sql, (id_agenda,))
+                    return cur.fetchall()
             finally:
                 conn.close()
-        return None
+        return []
 
     # --- ÉQUIPES ---
     def creer_equipe(self, nom_equipe, couleur, id_agenda):
@@ -176,14 +176,14 @@ class BaseDeDonnees:
                 conn.close()
         return []
 
-    # --- ÉVÉNEMENTS (AVEC GESTION CONFLITS) ---
+    # --- ÉVÉNEMENTS (FILTRAGE STRICT) ---
     def ajouter_evenement(self, titre, desc, debut, fin, id_agenda, id_equipe, id_createur):
         conn = self.get_connection()
         if conn:
             try:
                 with conn:
                     with conn.cursor() as cur:
-                        # 1. Vérification Conflits
+                        # 1. Vérif Conflits
                         if id_equipe is not None:
                             sql_check = """
                                 SELECT count(*) FROM gestion_agenda.EVENEMENT
@@ -195,8 +195,7 @@ class BaseDeDonnees:
                                 );
                             """
                             cur.execute(sql_check, (id_agenda, id_equipe, debut, debut, fin, fin, debut, fin))
-                            if cur.fetchone()[0] > 0:
-                                return "ConflitDetecte"
+                            if cur.fetchone()[0] > 0: return "ConflitDetecte"
 
                         # 2. Insertion
                         sql = """
@@ -213,19 +212,38 @@ class BaseDeDonnees:
                 conn.close()
         return "ErreurConnexion"
 
-    def recuperer_evenements(self, id_agenda):
-        sql = """
-            SELECT E.id_event, E.titre, E.date_debut, E.date_fin, EQ.nom_equipe, EQ.couleur_equipe, E.description
-            FROM gestion_agenda.EVENEMENT E
-            LEFT JOIN gestion_agenda.EQUIPE EQ ON E.id_equipe_concernee = EQ.id_equipe
-            WHERE E.id_agenda = %s
-            ORDER BY E.date_debut ASC;
+    def recuperer_evenements_filtres(self, id_agenda, role_user, id_equipe_user):
+        """
+        Récupère les événements selon le rôle :
+        - Admin : Voit tout.
+        - Chef/Collab : Voit uniquement son équipe + les événements généraux (équipe NULL).
         """
         conn = self.get_connection()
         if conn:
             try:
                 with conn.cursor() as cur:
-                    cur.execute(sql, (id_agenda,))
+                    
+                    if role_user == 'Administrateur':
+                        # Admin voit tout
+                        sql = """
+                            SELECT E.id_event, E.titre, E.date_debut, E.date_fin, EQ.nom_equipe, EQ.couleur_equipe, E.description
+                            FROM gestion_agenda.EVENEMENT E
+                            LEFT JOIN gestion_agenda.EQUIPE EQ ON E.id_equipe_concernee = EQ.id_equipe
+                            WHERE E.id_agenda = %s ORDER BY E.date_debut ASC;
+                        """
+                        cur.execute(sql, (id_agenda,))
+                    else:
+                        # Chef ou Collab ne voit que son équipe ou général
+                        sql = """
+                            SELECT E.id_event, E.titre, E.date_debut, E.date_fin, EQ.nom_equipe, EQ.couleur_equipe, E.description
+                            FROM gestion_agenda.EVENEMENT E
+                            LEFT JOIN gestion_agenda.EQUIPE EQ ON E.id_equipe_concernee = EQ.id_equipe
+                            WHERE E.id_agenda = %s 
+                            AND (E.id_equipe_concernee = %s OR E.id_equipe_concernee IS NULL)
+                            ORDER BY E.date_debut ASC;
+                        """
+                        cur.execute(sql, (id_agenda, id_equipe_user))
+                        
                     return cur.fetchall()
             finally:
                 conn.close()
