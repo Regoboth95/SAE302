@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mes Agendas</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
+        <div class="container">
+            <a class="navbar-brand" href="#">Agenda R&T</a>
+            <div class="d-flex text-white align-items-center">
+                <span class="me-3">Connecté en tant que : <strong>{{ pseudo }}</strong></span>
+                <a href="{{ url_for('logout') }}" class="btn btn-sm btn-light text-primary">Déconnexion</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="alert alert-success">{{ messages[0] }}</div>
+            {% endif %}
+        {% endwith %}
+
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white fw-bold">
+                        + Créer un nouvel Agenda
+                    </div>
+                    <div class="card-body">
+                        <form action="{{ url_for('nouveau_agenda') }}" method="POST">
+                            <div class="mb-3">
+                                <label class="form-label">Nom du projet / Agenda</label>
+                                <input type="text" name="nom_agenda" class="form-control" placeholder="Ex: Projet SAÉ" required>
+                            </div>
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary">Créer l'agenda</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-8">
+                <h4 class="mb-3">Mes Agendas</h4>
+                
+                {% if agendas %}
+                    <div class="list-group shadow-sm">
+                        {% for agenda in agendas %}
+                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5 class="mb-1">{{ agenda[0] }}</h5>
+                                    <span class="badge bg-info text-dark">{{ agenda[1] }}</span>
+                                </div>
+                                <button class="btn btn-outline-secondary btn-sm" disabled>
+                                    Voir (V2)
+                                </button>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="alert alert-warning">
+                        Vous n'avez aucun agenda. Créez-en un à gauche pour commencer !
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

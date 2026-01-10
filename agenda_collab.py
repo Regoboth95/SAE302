@@ -22,30 +22,27 @@ class BaseDeDonnees:
             return None
 
     def ajouter_utilisateur(self, nom, prenom, mdp):
-        """
-        Ajoute un utilisateur de manière sécurisée.
-        Respecte la règle anti-injection SQL du cours (Slide 70) 
-        """
-        sql = """
-            INSERT INTO gestion_agenda.UTILISATEUR (nom, prenom, mot_de_passe)
-            VALUES (%s, %s, %s)
-            RETURNING id_user;
-        """
+        """ Inscription avec COMMIT explicite """
+        # Attention au schéma : gestion_agenda.UTILISATEUR ou juste UTILISATEUR selon votre choix précédent
+        sql = "INSERT INTO gestion_agenda.UTILISATEUR (nom, prenom, mot_de_passe) VALUES (%s, %s, %s) RETURNING id_user;"
+        
         conn = self.get_connection()
         if conn:
             try:
-                # Utilisation du contexte 'with' recommandé 
-                with conn: 
-                    with conn.cursor() as cur:
-                        # On passe les données en 2ème argument (tuple), JAMAIS en concaténation
-                        cur.execute(sql, (nom, prenom, mdp))
-                        new_id = cur.fetchone()[0]
-                        print(f"Utilisateur créé avec l'ID : {new_id}")
-                        return new_id
+                cur = conn.cursor()
+                cur.execute(sql, (nom, prenom, mdp))
+                new_id = cur.fetchone()[0]
+                
+                conn.commit()  # <--- AJOUTEZ CETTE LIGNE OBLIGATOIREMENT
+                
+                cur.close()
+                return new_id
             except Exception as e:
-                print(f"Erreur lors de l'insertion : {e}")
+                print(f"Erreur inscription : {e}")
+                conn.rollback() # Annule en cas d'erreur
             finally:
-                conn.close() # [cite: 527]
+                conn.close()
+        return None
 
     def recuperer_agendas_utilisateur(self, id_user):
         """
