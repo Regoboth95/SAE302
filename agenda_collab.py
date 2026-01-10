@@ -75,16 +75,14 @@ class BaseDeDonnees:
                         new_id = cur.fetchone()[0]
                         cur.execute("SELECT id_role FROM gestion_agenda.ROLE WHERE libelle = 'Administrateur'")
                         id_role = cur.fetchone()[0]
-                        # L'admin n'a pas d'équipe spécifique (NULL), il voit tout
                         cur.execute("INSERT INTO gestion_agenda.PARTICIPATION (id_user, id_agenda, id_role, id_equipe) VALUES (%s, %s, %s, NULL);", (id_createur, new_id, id_role))
                         return new_id
             finally:
                 conn.close()
         return None
 
-    # --- NOYAU DE SÉCURITÉ & VISIBILITÉ ---
+    # --- NOYAU DE SÉCURITÉ ---
     def recuperer_infos_membre(self, id_user, id_agenda):
-        """ Renvoie un dict : {'role': '...', 'id_equipe': 12} """
         sql = """
             SELECT R.libelle, P.id_equipe
             FROM gestion_agenda.PARTICIPATION P
@@ -97,14 +95,12 @@ class BaseDeDonnees:
                 with conn.cursor() as cur:
                     cur.execute(sql, (id_user, id_agenda))
                     res = cur.fetchone()
-                    if res:
-                        return {'role': res[0], 'id_equipe': res[1]}
+                    if res: return {'role': res[0], 'id_equipe': res[1]}
             finally:
                 conn.close()
         return None
 
     def ajouter_membre(self, id_agenda, pseudo_invite, role_choisi, id_equipe):
-        """ Invite un utilisateur et L'ASSIGNE A UNE EQUIPE """
         conn = self.get_connection()
         if conn:
             try:
@@ -134,7 +130,6 @@ class BaseDeDonnees:
         return "ErreurConnexion"
 
     def recuperer_participants(self, id_agenda):
-        # Cette version permet de récupérer l'ID pour la suppression
         sql = """
             SELECT U.nom, R.libelle, E.nom_equipe, E.couleur_equipe, U.id_user, P.id_equipe
             FROM gestion_agenda.PARTICIPATION P
@@ -155,7 +150,6 @@ class BaseDeDonnees:
         return []
 
     def supprimer_membre(self, id_agenda, id_user_cible):
-        """ Supprime un utilisateur de l'agenda """
         sql = "DELETE FROM gestion_agenda.PARTICIPATION WHERE id_agenda = %s AND id_user = %s;"
         conn = self.get_connection()
         if conn:
@@ -163,8 +157,6 @@ class BaseDeDonnees:
                 with conn:
                     with conn.cursor() as cur:
                         cur.execute(sql, (id_agenda, id_user_cible))
-            except Exception as e:
-                print(f"Erreur suppression : {e}")
             finally:
                 conn.close()
 
@@ -179,17 +171,6 @@ class BaseDeDonnees:
             finally:
                 conn.close()
 
-    def recuperer_equipes(self, id_agenda):
-        conn = self.get_connection()
-        if conn:
-            try:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT id_equipe, nom_equipe, couleur_equipe FROM gestion_agenda.EQUIPE WHERE id_agenda = %s;", (id_agenda,))
-                    return cur.fetchall()
-            finally:
-                conn.close()
-        return []
-        
     def supprimer_equipe(self, id_equipe):
         """ Supprime une équipe (et ses événements en cascade via SQL) """
         conn = self.get_connection()
@@ -203,14 +184,38 @@ class BaseDeDonnees:
             finally:
                 conn.close()
 
-    # --- ÉVÉNEMENTS (FILTRAGE STRICT) ---
+    def recuperer_equipes(self, id_agenda):
+        conn = self.get_connection()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT id_equipe, nom_equipe, couleur_equipe FROM gestion_agenda.EQUIPE WHERE id_agenda = %s;", (id_agenda,))
+                    return cur.fetchall()
+            finally:
+                conn.close()
+        return []
+
+    # --- ÉVÉNEMENTS ---
+    def recuperer_info_event_basic(self, id_event):
+        """ Récupère l'équipe de l'event pour vérif sécurité """
+        sql = "SELECT id_equipe_concernee FROM gestion_agenda.EVENEMENT WHERE id_event = %s"
+        conn = self.get_connection()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(sql, (id_event,))
+                    res = cur.fetchone()
+                    return res[0] if res else None
+            finally:
+                conn.close()
+        return None
+
     def ajouter_evenement(self, titre, desc, debut, fin, id_agenda, id_equipe, id_createur):
         conn = self.get_connection()
         if conn:
             try:
                 with conn:
                     with conn.cursor() as cur:
-                        # 1. Vérif Conflits
                         if id_equipe is not None:
                             sql_check = """
                                 SELECT count(*) FROM gestion_agenda.EVENEMENT
@@ -224,7 +229,6 @@ class BaseDeDonnees:
                             cur.execute(sql_check, (id_agenda, id_equipe, debut, debut, fin, fin, debut, fin))
                             if cur.fetchone()[0] > 0: return "ConflitDetecte"
 
-                        # 2. Insertion
                         sql = """
                             INSERT INTO gestion_agenda.EVENEMENT 
                             (titre, description, date_debut, date_fin, id_agenda, id_equipe_concernee, id_createur)
@@ -245,7 +249,6 @@ class BaseDeDonnees:
             try:
                 with conn.cursor() as cur:
                     if role_user == 'Administrateur':
-                        # Admin voit tout
                         sql = """
                             SELECT E.id_event, E.titre, E.date_debut, E.date_fin, EQ.nom_equipe, EQ.couleur_equipe, E.description
                             FROM gestion_agenda.EVENEMENT E
@@ -254,7 +257,6 @@ class BaseDeDonnees:
                         """
                         cur.execute(sql, (id_agenda,))
                     else:
-                        # Chef ou Collab ne voit que son équipe ou général
                         sql = """
                             SELECT E.id_event, E.titre, E.date_debut, E.date_fin, EQ.nom_equipe, EQ.couleur_equipe, E.description
                             FROM gestion_agenda.EVENEMENT E
@@ -268,48 +270,78 @@ class BaseDeDonnees:
             finally:
                 conn.close()
         return []
-        
-# --- DRAG & DROP INTELLIGENT ---
+
     def modifier_dates_evenement(self, id_event, nouv_debut, nouv_fin):
-        """ 
-        Met à jour les dates avec vérification des conflits.
-        Renvoie "OK", "Conflit", ou "Erreur".
-        """
+        """ Met à jour les dates avec vérification des conflits (Drag & Drop) """
         conn = self.get_connection()
         if conn:
             try:
                 with conn:
                     with conn.cursor() as cur:
-                        # 1. On récupère les infos de l'événement qu'on déplace (Agenda + Equipe)
                         cur.execute("SELECT id_agenda, id_equipe_concernee FROM gestion_agenda.EVENEMENT WHERE id_event = %s", (id_event,))
                         info = cur.fetchone()
                         if not info: return "Erreur"
-                        
                         id_agenda, id_equipe = info
 
-                        # 2. Si l'événement est lié à une équipe, on vérifie les conflits
-                        # (On exclut l'événement lui-même avec "AND id_event != %s")
                         if id_equipe is not None:
                             sql_check = """
                                 SELECT count(*) FROM gestion_agenda.EVENEMENT
                                 WHERE id_agenda = %s AND id_equipe_concernee = %s
                                 AND id_event != %s 
-                                AND (
-                                    (date_debut < %s AND date_fin > %s) -- Chevauchement strict
-                                );
+                                AND ((date_debut < %s AND date_fin > %s));
                             """
-                            # Note: FullCalendar envoie des bornes parfois exclusives, on simplifie la logique
                             cur.execute(sql_check, (id_agenda, id_equipe, id_event, nouv_fin, nouv_debut))
-                            if cur.fetchone()[0] > 0:
-                                return "Conflit"
+                            if cur.fetchone()[0] > 0: return "Conflit"
 
-                        # 3. Si tout est bon, on met à jour
-                        sql_update = "UPDATE gestion_agenda.EVENEMENT SET date_debut = %s, date_fin = %s WHERE id_event = %s;"
-                        cur.execute(sql_update, (nouv_debut, nouv_fin, id_event))
+                        cur.execute("UPDATE gestion_agenda.EVENEMENT SET date_debut = %s, date_fin = %s WHERE id_event = %s;", (nouv_debut, nouv_fin, id_event))
+                        return "OK"
+            except: return "Erreur"
+            finally: conn.close()
+        return "Erreur"
+
+    def modifier_infos_evenement(self, id_event, titre, description, debut, fin, id_nouvelle_equipe, id_user_modif):
+        """ Modifie un événement (Y COMPRIS L'ÉQUIPE) """
+        conn = self.get_connection()
+        if conn:
+            try:
+                with conn:
+                    with conn.cursor() as cur:
+                        # 1. Vérif Conflits dans la nouvelle équipe
+                        if id_nouvelle_equipe is not None:
+                            sql_check = """
+                                SELECT count(*) FROM gestion_agenda.EVENEMENT 
+                                WHERE id_agenda = (SELECT id_agenda FROM gestion_agenda.EVENEMENT WHERE id_event = %s)
+                                AND id_equipe_concernee = %s 
+                                AND id_event != %s 
+                                AND ((date_debut < %s AND date_fin > %s));
+                            """
+                            cur.execute(sql_check, (id_event, id_nouvelle_equipe, id_event, fin, debut))
+                            if cur.fetchone()[0] > 0: return "Conflit"
+
+                        # 2. Mise à jour complète
+                        sql = """
+                            UPDATE gestion_agenda.EVENEMENT 
+                            SET titre=%s, description=%s, date_debut=%s, date_fin=%s, id_equipe_concernee=%s 
+                            WHERE id_event=%s;
+                        """
+                        cur.execute(sql, (titre, description, debut, fin, id_nouvelle_equipe, id_event))
                         return "OK"
             except Exception as e:
-                print(f"Erreur update drag&drop : {e}")
+                print(f"Erreur modif : {e}")
                 return "Erreur"
             finally:
                 conn.close()
         return "Erreur"
+
+    def supprimer_evenement(self, id_event):
+        """ Supprime un événement """
+        conn = self.get_connection()
+        if conn:
+            try:
+                with conn:
+                    with conn.cursor() as cur:
+                        cur.execute("DELETE FROM gestion_agenda.EVENEMENT WHERE id_event = %s;", (id_event,))
+                        return True
+            except: return False
+            finally: conn.close()
+        return False
