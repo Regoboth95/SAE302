@@ -61,20 +61,24 @@ def nouveau_agenda():
         flash("Agenda créé avec succès !")
     return redirect(url_for('index'))
 
-# --- VUE CALENDRIER & ÉQUIPES (V1) ---
+# --- VUE CALENDRIER & ÉQUIPES (V1 COMPLETE) ---
 @app.route('/agenda/<int:id_agenda>')
 def voir_agenda(id_agenda):
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
-    # Récupération des données pour l'affichage
+    # 1. Équipes
     equipes = bdd.recuperer_equipes(id_agenda)
+    # 2. Événements
     evenements = bdd.recuperer_evenements(id_agenda)
+    # 3. Participants (Nouveau !)
+    membres = bdd.recuperer_participants(id_agenda)
     
     return render_template('agenda.html', 
                            id_agenda=id_agenda, 
                            equipes=equipes, 
-                           evenements=evenements)
+                           evenements=evenements,
+                           membres=membres)
 
 @app.route('/agenda/<int:id_agenda>/nouvelle_equipe', methods=['POST'])
 def nouvelle_equipe(id_agenda):
@@ -97,11 +101,31 @@ def nouvel_evenement(id_agenda):
     fin = request.form['date_fin']
     id_equipe = request.form.get('id_equipe') 
     
-    # Gestion du cas "Aucune équipe"
     if id_equipe == "":
         id_equipe = None
     
     bdd.ajouter_evenement(titre, desc, debut, fin, id_agenda, id_equipe, session['user_id'])
+    return redirect(url_for('voir_agenda', id_agenda=id_agenda))
+
+# --- ROUTE INVITATION (NOUVEAU) ---
+@app.route('/agenda/<int:id_agenda>/inviter_membre', methods=['POST'])
+def inviter_membre(id_agenda):
+    if 'user_id' not in session: return redirect(url_for('login'))
+    
+    pseudo = request.form['pseudo_invite']
+    role = request.form['role_invite']
+    
+    resultat = bdd.ajouter_membre(id_agenda, pseudo, role)
+    
+    if resultat == "OK":
+        flash(f"{pseudo} a été ajouté en tant que {role} !")
+    elif resultat == "UserIntrouvable":
+        flash(f"Erreur : L'utilisateur '{pseudo}' n'existe pas.")
+    elif resultat == "DejaMembre":
+        flash(f"Erreur : {pseudo} est déjà dans l'agenda.")
+    else:
+        flash("Erreur lors de l'invitation.")
+        
     return redirect(url_for('voir_agenda', id_agenda=id_agenda))
 
 if __name__ == '__main__':

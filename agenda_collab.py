@@ -36,7 +36,7 @@ class BaseDeDonnees:
                 with conn.cursor() as cur:
                     cur.execute(sql, (pseudo,))
                     user = cur.fetchone()
-                    if user and user[3] == password: # Comparaison simple (à hasher en V3)
+                    if user and user[3] == password: 
                         return user
             except Exception as e:
                 print(f"Erreur login : {e}")
@@ -64,7 +64,7 @@ class BaseDeDonnees:
                 conn.close()
         return None
 
-    # --- AGENDAS ---
+    # --- AGENDAS & PARTICIPANTS (INVITATIONS) ---
 
     def recuperer_agendas_utilisateur(self, id_user):
         """ Récupère les agendas """
@@ -110,6 +110,63 @@ class BaseDeDonnees:
             finally:
                 conn.close()
         return None
+
+    def recuperer_participants(self, id_agenda):
+        """ Récupère la liste des membres d'un agenda """
+        sql = """
+            SELECT U.nom, R.libelle 
+            FROM gestion_agenda.PARTICIPATION P
+            JOIN gestion_agenda.UTILISATEUR U ON P.id_user = U.id_user
+            JOIN gestion_agenda.ROLE R ON P.id_role = R.id_role
+            WHERE P.id_agenda = %s;
+        """
+        conn = self.get_connection()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(sql, (id_agenda,))
+                    return cur.fetchall()
+            finally:
+                conn.close()
+        return []
+
+    def ajouter_membre(self, id_agenda, pseudo_invite, role_choisi):
+        """ Invite un utilisateur dans l'agenda """
+        conn = self.get_connection()
+        if conn:
+            try:
+                with conn:
+                    with conn.cursor() as cur:
+                        # 1. Trouver l'ID du user
+                        cur.execute("SELECT id_user FROM gestion_agenda.UTILISATEUR WHERE nom = %s", (pseudo_invite,))
+                        res_user = cur.fetchone()
+                        if not res_user:
+                            return "UserIntrouvable"
+                        id_invite = res_user[0]
+
+                        # 2. Trouver l'ID du rôle
+                        cur.execute("SELECT id_role FROM gestion_agenda.ROLE WHERE libelle = %s", (role_choisi,))
+                        res_role = cur.fetchone()
+                        if not res_role:
+                            return "RoleIntrouvable"
+                        id_role = res_role[0]
+
+                        # 3. Vérifier s'il est déjà dedans
+                        cur.execute("SELECT * FROM gestion_agenda.PARTICIPATION WHERE id_user=%s AND id_agenda=%s", (id_invite, id_agenda))
+                        if cur.fetchone():
+                            return "DejaMembre"
+
+                        # 4. Insérer
+                        sql = "INSERT INTO gestion_agenda.PARTICIPATION (id_user, id_agenda, id_role) VALUES (%s, %s, %s)"
+                        cur.execute(sql, (id_invite, id_agenda, id_role))
+                        return "OK"
+            except Exception as e:
+                print(f"Erreur invitation : {e}")
+                return "ErreurTech"
+            finally:
+                conn.close()
+        return "ErreurConnexion"
+
 
     # --- ÉQUIPES (V1) ---
 
