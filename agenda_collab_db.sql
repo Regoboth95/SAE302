@@ -1,83 +1,87 @@
--- 1. Création d'un Rôle de connexion pour votre application Python
--- On évite d'utiliser le superuser 'postgres' dans le code Python par sécurité.
-CREATE ROLE app_agenda_user LOGIN PASSWORD 'Azerty@123';
+-- =============================================================================
+-- SCRIPT DE CRÉATION DE LA BDD - AGENDA COLLABORATIF (V1 - VALIDÉE)
+-- Comprend : Utilisateurs, Agendas, Équipes, Événements (Calendrier)
+-- =============================================================================
 
--- 2. Création de la base de données (si elle n'existe pas déjà)
-CREATE DATABASE agenda_collaboratif OWNER app_agenda_user;
+-- 1. Configuration du schéma
+CREATE SCHEMA IF NOT EXISTS gestion_agenda;
 
--- \c agenda_collaboratif -- (Commande pour se connecter à la base si vous êtes dans psql)
+-- Nettoyage (DROP) pour repartir à zéro si on relance le script
+DROP TABLE IF EXISTS gestion_agenda.EVENEMENT CASCADE;
+DROP TABLE IF EXISTS gestion_agenda.PARTICIPATION CASCADE;
+DROP TABLE IF EXISTS gestion_agenda.EQUIPE CASCADE;
+DROP TABLE IF EXISTS gestion_agenda.AGENDA CASCADE;
+DROP TABLE IF EXISTS gestion_agenda.ROLE CASCADE;
+DROP TABLE IF EXISTS gestion_agenda.UTILISATEUR CASCADE;
 
--- 3. Création d'un Schéma pour organiser proprement nos tables
-CREATE SCHEMA gestion_agenda AUTHORIZATION app_agenda_user;
+-- 2. Table UTILISATEUR
+CREATE TABLE gestion_agenda.UTILISATEUR (
+    id_user SERIAL PRIMARY KEY,
+    nom VARCHAR(50) NOT NULL,
+    prenom VARCHAR(50) NOT NULL,
+    mot_de_passe VARCHAR(100) NOT NULL
+);
 
--- 4. Création des Tables dans le schéma 'gestion_agenda'
--- Note : On utilise SERIAL pour l'auto-incrémentation PostgreSQL
-
--- Table Rôle (Rôles fonctionnels de l'appli : Admin, Chef d'équipe...)
+-- 3. Table ROLE
 CREATE TABLE gestion_agenda.ROLE (
     id_role SERIAL PRIMARY KEY,
-    libelle VARCHAR(50) NOT NULL UNIQUE
+    libelle VARCHAR(50) UNIQUE NOT NULL
 );
 
--- Table Utilisateur
-CREATE TABLE gestion_agenda.UTILISATEUR (
-    id_user SERIAL PRIMARY KEY, -- Correspond à 'id_usu' de votre schéma
-    nom VARCHAR(50) NOT NULL,   -- [cite: 277]
-    prenom VARCHAR(50) NOT NULL,
-    mot_de_passe VARCHAR(255) NOT NULL
-);
+-- Insertion des rôles imposés par le cahier des charges
+INSERT INTO gestion_agenda.ROLE (libelle) VALUES ('Administrateur');
+INSERT INTO gestion_agenda.ROLE (libelle) VALUES ('Chef d''équipe');
+INSERT INTO gestion_agenda.ROLE (libelle) VALUES ('Collaborateur');
 
--- Table Agenda
+-- 4. Table AGENDA
 CREATE TABLE gestion_agenda.AGENDA (
     id_agenda SERIAL PRIMARY KEY,
     nom_agenda VARCHAR(100) NOT NULL,
     id_createur INT NOT NULL,
-    -- Clé étrangère vers Utilisateur
     FOREIGN KEY (id_createur) REFERENCES gestion_agenda.UTILISATEUR(id_user) ON DELETE CASCADE
 );
 
--- Table Equipe
+-- 5. Table ÉQUIPE (Nouvelle !)
 CREATE TABLE gestion_agenda.EQUIPE (
     id_equipe SERIAL PRIMARY KEY,
-    nom_equipe VARCHAR(100) NOT NULL,
-    code_couleur VARCHAR(7) NOT NULL, -- Ex: #FF0000
+    nom_equipe VARCHAR(50) NOT NULL,
+    couleur_equipe VARCHAR(7) DEFAULT '#0d6efd', -- Stocke le code couleur Hexa (ex: #FF0000)
     id_agenda INT NOT NULL,
     FOREIGN KEY (id_agenda) REFERENCES gestion_agenda.AGENDA(id_agenda) ON DELETE CASCADE
 );
 
--- Table Participation (Liaison)
+-- 6. Table PARTICIPATION (Lien User <-> Agenda <-> Role <-> Equipe)
 CREATE TABLE gestion_agenda.PARTICIPATION (
-    id_role INT NOT NULL,
     id_user INT NOT NULL,
     id_agenda INT NOT NULL,
-    id_equipe_managee INT, -- NULLABLE (Vide si pas chef d'équipe)
+    id_role INT NOT NULL,
+    id_equipe INT, -- Un utilisateur peut appartenir à une équipe (optionnel au début)
     
     PRIMARY KEY (id_user, id_agenda),
-    FOREIGN KEY (id_role) REFERENCES gestion_agenda.ROLE(id_role),
+    
     FOREIGN KEY (id_user) REFERENCES gestion_agenda.UTILISATEUR(id_user) ON DELETE CASCADE,
     FOREIGN KEY (id_agenda) REFERENCES gestion_agenda.AGENDA(id_agenda) ON DELETE CASCADE,
-    FOREIGN KEY (id_equipe_managee) REFERENCES gestion_agenda.EQUIPE(id_equipe)
+    FOREIGN KEY (id_role) REFERENCES gestion_agenda.ROLE(id_role) ON DELETE RESTRICT,
+    FOREIGN KEY (id_equipe) REFERENCES gestion_agenda.EQUIPE(id_equipe) ON DELETE SET NULL
 );
 
--- Table Ticket
-CREATE TABLE gestion_agenda.TICKET (
-    id_ticket SERIAL PRIMARY KEY,
+-- 7. Table EVENEMENT (Remplace les Tâches pour le mode Calendrier)
+CREATE TABLE gestion_agenda.EVENEMENT (
+    id_event SERIAL PRIMARY KEY,
     titre VARCHAR(100) NOT NULL,
     description TEXT,
-    date_debut TIMESTAMP NOT NULL, -- TIMESTAMP pour PostgreSQL
-    date_fin TIMESTAMP NOT NULL,
-    id_agenda INT NOT NULL,
-    id_equipe INT NOT NULL,
     
+    -- Gestion des plages horaires (ex: Lundi 14h00 à 16h00)
+    date_debut TIMESTAMP NOT NULL,
+    date_fin TIMESTAMP NOT NULL,
+    
+    id_agenda INT NOT NULL,
+    id_equipe_concernee INT, -- L'événement est lié à une équipe (pour la couleur)
+    id_createur INT,
+
     FOREIGN KEY (id_agenda) REFERENCES gestion_agenda.AGENDA(id_agenda) ON DELETE CASCADE,
-    FOREIGN KEY (id_equipe) REFERENCES gestion_agenda.EQUIPE(id_equipe)
+    FOREIGN KEY (id_equipe_concernee) REFERENCES gestion_agenda.EQUIPE(id_equipe) ON DELETE SET NULL,
+    FOREIGN KEY (id_createur) REFERENCES gestion_agenda.UTILISATEUR(id_user) ON DELETE SET NULL
 );
 
--- 5. Attribution des droits (GRANT)
--- On s'assure que notre utilisateur Python a bien le droit de tout faire dans ce schéma
-GRANT USAGE, CREATE ON SCHEMA gestion_agenda TO app_agenda_user;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA gestion_agenda TO app_agenda_user;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA gestion_agenda TO app_agenda_user; -- Pour les SERIAL
-
--- Insertion des rôles de base
-INSERT INTO gestion_agenda.ROLE (libelle) VALUES ('Administrateur'), ('Collaborateur'), ('Chef d''équipe');
+-- Fin du script

@@ -3,12 +3,12 @@ from psycopg2 import OperationalError
 
 class BaseDeDonnees:
     def __init__(self):
-        # Paramètres de connexion définis dans le cours [cite: 536, 540]
+        # Configuration BDD (PC Local)
         self.db_config = {
             "host": "localhost",
             "port": 5432,
             "dbname": "agenda_collaboratif",
-            "user": "app_agenda_user",   # Le rôle qu'on a créé en SQL
+            "user": "app_agenda_user",
             "password": "Azerty@123"
         }
 
@@ -18,38 +18,58 @@ class BaseDeDonnees:
             conn = psycopg2.connect(**self.db_config)
             return conn
         except OperationalError as e:
-            print(f"Erreur de connexion : {e}")
+            print(f"❌ Erreur de connexion BDD : {e}")
             return None
 
-    def ajouter_utilisateur(self, nom, prenom, mdp):
-        """ Inscription avec COMMIT explicite """
-        # Attention au schéma : gestion_agenda.UTILISATEUR ou juste UTILISATEUR selon votre choix précédent
-        sql = "INSERT INTO gestion_agenda.UTILISATEUR (nom, prenom, mot_de_passe) VALUES (%s, %s, %s) RETURNING id_user;"
-        
+    # --- UTILISATEURS ---
+
+    def verifier_connexion(self, pseudo, password):
+        """ Vérifie le login """
+        sql = """
+            SELECT id_user, nom, prenom, mot_de_passe 
+            FROM gestion_agenda.UTILISATEUR 
+            WHERE nom = %s;
+        """
         conn = self.get_connection()
         if conn:
             try:
-                cur = conn.cursor()
-                cur.execute(sql, (nom, prenom, mdp))
-                new_id = cur.fetchone()[0]
-                
-                conn.commit()  # <--- AJOUTEZ CETTE LIGNE OBLIGATOIREMENT
-                
-                cur.close()
-                return new_id
+                with conn.cursor() as cur:
+                    cur.execute(sql, (pseudo,))
+                    user = cur.fetchone()
+                    if user and user[3] == password: # Comparaison simple (à hasher en V3)
+                        return user
             except Exception as e:
-                print(f"Erreur inscription : {e}")
-                conn.rollback() # Annule en cas d'erreur
+                print(f"Erreur login : {e}")
             finally:
                 conn.close()
         return None
 
-    def recuperer_agendas_utilisateur(self, id_user):
-        """
-        Récupère les agendas où l'utilisateur est inscrit.
-        """
+    def ajouter_utilisateur(self, nom, prenom, mdp):
+        """ Inscription """
         sql = """
-            SELECT A.nom_agenda, R.libelle 
+            INSERT INTO gestion_agenda.UTILISATEUR (nom, prenom, mot_de_passe) 
+            VALUES (%s, %s, %s) 
+            RETURNING id_user;
+        """
+        conn = self.get_connection()
+        if conn:
+            try:
+                with conn:
+                    with conn.cursor() as cur:
+                        cur.execute(sql, (nom, prenom, mdp))
+                        return cur.fetchone()[0]
+            except Exception as e:
+                print(f"Erreur inscription : {e}")
+            finally:
+                conn.close()
+        return None
+
+    # --- AGENDAS ---
+
+    def recuperer_agendas_utilisateur(self, id_user):
+        """ Récupère les agendas """
+        sql = """
+            SELECT A.nom_agenda, R.libelle, A.id_agenda
             FROM gestion_agenda.PARTICIPATION P
             JOIN gestion_agenda.AGENDA A ON P.id_agenda = A.id_agenda
             JOIN gestion_agenda.ROLE R ON P.id_role = R.id_role
@@ -58,83 +78,82 @@ class BaseDeDonnees:
         conn = self.get_connection()
         if conn:
             try:
-                with conn:
-                    with conn.cursor() as cur:
-                        cur.execute(sql, (id_user,))
-                        resultats = cur.fetchall() # [cite: 569]
-                        
-                        print(f"--- Agendas pour l'utilisateur {id_user} ---")
-                        for ligne in resultats:
-                            print(f"Agenda : {ligne[0]} | Rôle : {ligne[1]}")
-                        return resultats
-            except Exception as e:
-                print(f"Erreur de lecture : {e}")
-            finally:
-                conn.close()
-
-    def verifier_connexion(self, pseudo, mot_de_passe):
-        """ Vérifie le couple login/mdp et renvoie les infos de l'user """
-        sql = """
-            SELECT id_user, nom, prenom 
-            FROM gestion_agenda.UTILISATEUR 
-            WHERE nom = %s AND mot_de_passe = %s;
-        """
-        conn = self.get_connection()
-        if conn:
-            try:
                 with conn.cursor() as cur:
-                    cur.execute(sql, (pseudo, mot_de_passe))
-                    return cur.fetchone() # Renvoie (id, nom, prenom) ou None
-            except Exception as e:
-                print(f"Erreur login : {e}")
+                    cur.execute(sql, (id_user,))
+                    return cur.fetchall()
             finally:
                 conn.close()
-        return None
-        
-    def creer_agenda(self, nom_agenda, id_createur):
-        """ Crée un agenda et définit le créateur comme Administrateur """
-        sql_agenda = """
-            INSERT INTO gestion_agenda.AGENDA (nom_agenda, id_createur) 
-            VALUES (%s, %s) 
-            RETURNING id_agenda;
-        """
-        sql_role = "SELECT id_role FROM gestion_agenda.ROLE WHERE libelle = 'Administrateur';"
-        sql_participation = """
-            INSERT INTO gestion_agenda.PARTICIPATION (id_user, id_agenda, id_role) 
-            VALUES (%s, %s, %s);
-        """
+        return []
 
+    def creer_agenda(self, nom_agenda, id_createur):
+        """ Crée un agenda et set le rôle Admin """
         conn = self.get_connection()
         if conn:
             try:
                 with conn:
                     with conn.cursor() as cur:
-                        # 1. On crée l'agenda
+                        # 1. Créer l'agenda
+                        sql_agenda = "INSERT INTO gestion_agenda.AGENDA (nom_agenda, id_createur) VALUES (%s, %s) RETURNING id_agenda;"
                         cur.execute(sql_agenda, (nom_agenda, id_createur))
-                        id_agenda = cur.fetchone()[0]
+                        new_id = cur.fetchone()[0]
 
-                        # 2. On récupère l'ID du rôle "Administrateur"
-                        cur.execute(sql_role)
-                        id_admin = cur.fetchone()[0]
+                        # 2. Récupérer l'ID du rôle 'Administrateur'
+                        cur.execute("SELECT id_role FROM gestion_agenda.ROLE WHERE libelle = 'Administrateur'")
+                        id_role_admin = cur.fetchone()[0]
 
-                        # 3. On lie l'utilisateur à l'agenda avec ce rôle
-                        cur.execute(sql_participation, (id_createur, id_agenda, id_admin))
-                        
-                        # Le 'with conn' fait le commit() automatiquement ici
-                        return id_agenda
+                        # 3. Créer la participation
+                        sql_part = "INSERT INTO gestion_agenda.PARTICIPATION (id_user, id_agenda, id_role) VALUES (%s, %s, %s);"
+                        cur.execute(sql_part, (id_createur, new_id, id_role_admin))
+                        return new_id
             except Exception as e:
                 print(f"Erreur création agenda : {e}")
             finally:
                 conn.close()
         return None
 
-# --- EXEMPLE D'UTILISATION (Pour tester) ---
-if __name__ == "__main__":
-    bdd = BaseDeDonnees()
-    
-    # 1. Création d'un user
-    # Note : Dans la vraie vie, il faudrait hasher le mot de passe avant !
-    mon_id = bdd.ajouter_utilisateur("Dupont", "Jean", "Secret1234")
-    
-    # 2. (Supposons qu'on ait ajouté un agenda via SQL pour tester...)
-    # bdd.recuperer_agendas_utilisateur(mon_id)
+    # --- ÉQUIPES (V1) ---
+
+    def creer_equipe(self, nom_equipe, couleur, id_agenda):
+        """ Crée une équipe avec une couleur dans un agenda """
+        sql = """
+            INSERT INTO gestion_agenda.EQUIPE (nom_equipe, couleur_equipe, id_agenda)
+            VALUES (%s, %s, %s);
+        """
+        conn = self.get_connection()
+        if conn:
+            try:
+                with conn:
+                    with conn.cursor() as cur:
+                        cur.execute(sql, (nom_equipe, couleur, id_agenda))
+            except Exception as e:
+                print(f"Erreur création équipe : {e}")
+            finally:
+                conn.close()
+
+    def recuperer_equipes(self, id_agenda):
+        """ Récupère la liste des équipes d'un agenda """
+        sql = "SELECT id_equipe, nom_equipe, couleur_equipe FROM gestion_agenda.EQUIPE WHERE id_agenda = %s;"
+        conn = self.get_connection()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(sql, (id_agenda,))
+                    return cur.fetchall()
+            finally:
+                conn.close()
+        return []
+
+    # --- ÉVÉNEMENTS (CALENDRIER V1) ---
+
+    def ajouter_evenement(self, titre, desc, debut, fin, id_agenda, id_equipe, id_createur):
+        """ Ajoute un événement (plage horaire) """
+        sql = """
+            INSERT INTO gestion_agenda.EVENEMENT 
+            (titre, description, date_debut, date_fin, id_agenda, id_equipe_concernee, id_createur)
+            VALUES (%s, %s, %s, %s, %s, %s, %s);
+        """
+        conn = self.get_connection()
+        if conn:
+            try:
+                with conn:
+                    with conn.cursor()
