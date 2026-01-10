@@ -189,6 +189,19 @@ class BaseDeDonnees:
             finally:
                 conn.close()
         return []
+        
+    def supprimer_equipe(self, id_equipe):
+        """ Supprime une équipe (et ses événements en cascade via SQL) """
+        conn = self.get_connection()
+        if conn:
+            try:
+                with conn:
+                    with conn.cursor() as cur:
+                        cur.execute("DELETE FROM gestion_agenda.EQUIPE WHERE id_equipe = %s;", (id_equipe,))
+            except Exception as e:
+                print(f"Erreur suppression équipe : {e}")
+            finally:
+                conn.close()
 
     # --- ÉVÉNEMENTS (FILTRAGE STRICT) ---
     def ajouter_evenement(self, titre, desc, debut, fin, id_agenda, id_equipe, id_createur):

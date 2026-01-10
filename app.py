@@ -71,6 +71,20 @@ def nouvelle_equipe(id_agenda):
     if infos['role'] == 'Administrateur':
         bdd.creer_equipe(request.form['nom_equipe'], request.form['couleur_equipe'], id_agenda)
     return redirect(url_for('voir_agenda', id_agenda=id_agenda))
+    
+@app.route('/agenda/<int:id_agenda>/supprimer_equipe/<int:id_equipe>', methods=['POST'])
+def supprimer_equipe(id_agenda, id_equipe):
+    if 'user_id' not in session: return redirect(url_for('login'))
+    
+    # Vérification : Seul l'Admin peut supprimer
+    infos = bdd.recuperer_infos_membre(session['user_id'], id_agenda)
+    if infos['role'] == 'Administrateur':
+        bdd.supprimer_equipe(id_equipe)
+        flash("Équipe supprimée avec succès.")
+    else:
+        flash("⛔ Accès refusé : Seul l'Admin peut supprimer des équipes.")
+        
+    return redirect(url_for('voir_agenda', id_agenda=id_agenda))
 
 @app.route('/agenda/<int:id_agenda>/nouvel_evenement', methods=['POST'])
 def nouvel_evenement(id_agenda):
