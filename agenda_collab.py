@@ -123,7 +123,6 @@ class BaseDeDonnees:
                         cur.execute("SELECT * FROM gestion_agenda.PARTICIPATION WHERE id_user=%s AND id_agenda=%s", (id_invite, id_agenda))
                         if cur.fetchone(): return "DejaMembre"
 
-                        # Insertion avec l'équipe !
                         sql = "INSERT INTO gestion_agenda.PARTICIPATION (id_user, id_agenda, id_role, id_equipe) VALUES (%s, %s, %s, %s)"
                         cur.execute(sql, (id_invite, id_agenda, id_role, id_equipe))
                         return "OK"
@@ -135,14 +134,15 @@ class BaseDeDonnees:
         return "ErreurConnexion"
 
     def recuperer_participants(self, id_agenda):
-        # On récupère aussi le nom de l'équipe du membre
+        # Cette version permet de récupérer l'ID pour la suppression
         sql = """
-            SELECT U.nom, R.libelle, E.nom_equipe, E.couleur_equipe
+            SELECT U.nom, R.libelle, E.nom_equipe, E.couleur_equipe, U.id_user, P.id_equipe
             FROM gestion_agenda.PARTICIPATION P
             JOIN gestion_agenda.UTILISATEUR U ON P.id_user = U.id_user
             JOIN gestion_agenda.ROLE R ON P.id_role = R.id_role
             LEFT JOIN gestion_agenda.EQUIPE E ON P.id_equipe = E.id_equipe
-            WHERE P.id_agenda = %s;
+            WHERE P.id_agenda = %s
+            ORDER BY E.nom_equipe, U.nom;
         """
         conn = self.get_connection()
         if conn:
@@ -153,6 +153,20 @@ class BaseDeDonnees:
             finally:
                 conn.close()
         return []
+
+    def supprimer_membre(self, id_agenda, id_user_cible):
+        """ Supprime un utilisateur de l'agenda """
+        sql = "DELETE FROM gestion_agenda.PARTICIPATION WHERE id_agenda = %s AND id_user = %s;"
+        conn = self.get_connection()
+        if conn:
+            try:
+                with conn:
+                    with conn.cursor() as cur:
+                        cur.execute(sql, (id_agenda, id_user_cible))
+            except Exception as e:
+                print(f"Erreur suppression : {e}")
+            finally:
+                conn.close()
 
     # --- ÉQUIPES ---
     def creer_equipe(self, nom_equipe, couleur, id_agenda):
@@ -213,16 +227,10 @@ class BaseDeDonnees:
         return "ErreurConnexion"
 
     def recuperer_evenements_filtres(self, id_agenda, role_user, id_equipe_user):
-        """
-        Récupère les événements selon le rôle :
-        - Admin : Voit tout.
-        - Chef/Collab : Voit uniquement son équipe + les événements généraux (équipe NULL).
-        """
         conn = self.get_connection()
         if conn:
             try:
                 with conn.cursor() as cur:
-                    
                     if role_user == 'Administrateur':
                         # Admin voit tout
                         sql = """
@@ -243,7 +251,6 @@ class BaseDeDonnees:
                             ORDER BY E.date_debut ASC;
                         """
                         cur.execute(sql, (id_agenda, id_equipe_user))
-                        
                     return cur.fetchall()
             finally:
                 conn.close()

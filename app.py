@@ -158,6 +158,48 @@ def inviter_membre(id_agenda):
     else: flash("Erreur technique.")
     
     return redirect(url_for('voir_agenda', id_agenda=id_agenda))
+    
+@app.route('/agenda/<int:id_agenda>/supprimer_membre/<int:id_membre>', methods=['POST'])
+def supprimer_membre(id_agenda, id_membre):
+    if 'user_id' not in session: return redirect(url_for('login'))
+    
+    # 1. Qui suis-je ?
+    infos_moi = bdd.recuperer_infos_membre(session['user_id'], id_agenda)
+    role_moi = infos_moi['role']
+    
+    # 2. Qui est la cible ?
+    infos_cible = bdd.recuperer_infos_membre(id_membre, id_agenda)
+    
+    # Sécurité de base
+    if not infos_cible:
+        flash("Utilisateur introuvable.")
+        return redirect(url_for('voir_agenda', id_agenda=id_agenda))
+
+    # --- LOGIQUE DE PERMISSION ---
+    autorise = False
+    
+    if role_moi == 'Administrateur':
+        # L'admin peut tout faire
+        autorise = True
+        
+    elif role_moi == 'Chef d\'équipe':
+        # Le chef ne peut supprimer QUE quelqu'un de son équipe
+        if infos_cible['id_equipe'] == infos_moi['id_equipe']:
+            autorise = True
+        
+        # PROTECTION : Un chef ne peut pas virer un Admin (même s'il bug)
+        if infos_cible['role'] == 'Administrateur':
+            autorise = False
+            flash("⛔ Un chef ne peut pas supprimer un Administrateur.")
+            return redirect(url_for('voir_agenda', id_agenda=id_agenda))
+
+    if autorise:
+        bdd.supprimer_membre(id_agenda, id_membre)
+        flash("Membre retiré de l'agenda.")
+    else:
+        flash("⛔ Vous n'avez pas le droit de supprimer ce membre.")
+        
+    return redirect(url_for('voir_agenda', id_agenda=id_agenda))
 
 if __name__ == '__main__':
     app.run(debug=True)
