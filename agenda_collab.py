@@ -172,7 +172,6 @@ class BaseDeDonnees:
                 conn.close()
 
     def supprimer_equipe(self, id_equipe):
-        """ Supprime une équipe (et ses événements en cascade via SQL) """
         conn = self.get_connection()
         if conn:
             try:
@@ -195,7 +194,44 @@ class BaseDeDonnees:
                 conn.close()
         return []
 
-    # --- ÉVÉNEMENTS ---
+    # --- HISTORIQUE (NOUVEAU V2) ---
+    def ajouter_historique(self, id_event, action, details, id_user):
+        """ Enregistre une action (Création, Modif...) dans l'historique """
+        sql = """
+            INSERT INTO gestion_agenda.HISTORIQUE (id_event, action, details, id_user)
+            VALUES (%s, %s, %s, %s);
+        """
+        conn = self.get_connection()
+        if conn:
+            try:
+                with conn:
+                    with conn.cursor() as cur:
+                        cur.execute(sql, (id_event, action, details, id_user))
+            except Exception as e:
+                print(f"Erreur historique : {e}")
+            finally:
+                conn.close()
+
+    def recuperer_historique(self, id_event):
+        """ Récupère la liste des actions pour un ticket """
+        sql = """
+            SELECT H.action, H.details, to_char(H.date_action, 'DD/MM/YYYY HH24:MI'), U.nom
+            FROM gestion_agenda.HISTORIQUE H
+            LEFT JOIN gestion_agenda.UTILISATEUR U ON H.id_user = U.id_user
+            WHERE H.id_event = %s
+            ORDER BY H.date_action DESC;
+        """
+        conn = self.get_connection()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(sql, (id_event,))
+                    return cur.fetchall()
+            finally:
+                conn.close()
+        return []
+
+    # --- ÉVÉNEMENTS (Avec Tracabilité V2) ---
     def recuperer_info_event_basic(self, id_event):
         """ Récupère l'équipe de l'event pour vérif sécurité """
         sql = "SELECT id_equipe_concernee FROM gestion_agenda.EVENEMENT WHERE id_event = %s"
@@ -216,6 +252,7 @@ class BaseDeDonnees:
             try:
                 with conn:
                     with conn.cursor() as cur:
+                        # 1. Vérif Conflits
                         if id_equipe is not None:
                             sql_check = """
                                 SELECT count(*) FROM gestion_agenda.EVENEMENT
@@ -229,12 +266,19 @@ class BaseDeDonnees:
                             cur.execute(sql_check, (id_agenda, id_equipe, debut, debut, fin, fin, debut, fin))
                             if cur.fetchone()[0] > 0: return "ConflitDetecte"
 
+                        # 2. Insertion
                         sql = """
                             INSERT INTO gestion_agenda.EVENEMENT 
                             (titre, description, date_debut, date_fin, id_agenda, id_equipe_concernee, id_createur)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s);
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            RETURNING id_event;
                         """
                         cur.execute(sql, (titre, desc, debut, fin, id_agenda, id_equipe, id_createur))
+                        new_id = cur.fetchone()[0]
+                        
+                        # 3. HISTORIQUE (V2)
+                        self.ajouter_historique(new_id, "Création", f"Ticket créé : {titre}", id_createur)
+                        
                         return "OK"
             except Exception as e:
                 print(e)
@@ -271,8 +315,8 @@ class BaseDeDonnees:
                 conn.close()
         return []
 
-    def modifier_dates_evenement(self, id_event, nouv_debut, nouv_fin):
-        """ Met à jour les dates avec vérification des conflits (Drag & Drop) """
+    def modifier_dates_evenement(self, id_event, nouv_debut, nouv_fin, id_user_modif):
+        """ Modifie date (Drag&Drop) et loggue l'historique """
         conn = self.get_connection()
         if conn:
             try:
@@ -294,19 +338,22 @@ class BaseDeDonnees:
                             if cur.fetchone()[0] > 0: return "Conflit"
 
                         cur.execute("UPDATE gestion_agenda.EVENEMENT SET date_debut = %s, date_fin = %s WHERE id_event = %s;", (nouv_debut, nouv_fin, id_event))
+                        
+                        # HISTORIQUE (V2)
+                        self.ajouter_historique(id_event, "Déplacement", f"Nouv. horaire : {nouv_debut}", id_user_modif)
+                        
                         return "OK"
             except: return "Erreur"
             finally: conn.close()
         return "Erreur"
 
     def modifier_infos_evenement(self, id_event, titre, description, debut, fin, id_nouvelle_equipe, id_user_modif):
-        """ Modifie un événement (Y COMPRIS L'ÉQUIPE) """
+        """ Modifie infos/équipe et loggue l'historique """
         conn = self.get_connection()
         if conn:
             try:
                 with conn:
                     with conn.cursor() as cur:
-                        # 1. Vérif Conflits dans la nouvelle équipe
                         if id_nouvelle_equipe is not None:
                             sql_check = """
                                 SELECT count(*) FROM gestion_agenda.EVENEMENT 
@@ -318,13 +365,16 @@ class BaseDeDonnees:
                             cur.execute(sql_check, (id_event, id_nouvelle_equipe, id_event, fin, debut))
                             if cur.fetchone()[0] > 0: return "Conflit"
 
-                        # 2. Mise à jour complète
                         sql = """
                             UPDATE gestion_agenda.EVENEMENT 
                             SET titre=%s, description=%s, date_debut=%s, date_fin=%s, id_equipe_concernee=%s 
                             WHERE id_event=%s;
                         """
                         cur.execute(sql, (titre, description, debut, fin, id_nouvelle_equipe, id_event))
+                        
+                        # HISTORIQUE (V2)
+                        self.ajouter_historique(id_event, "Modification", "Détails ou Équipe mis à jour", id_user_modif)
+                        
                         return "OK"
             except Exception as e:
                 print(f"Erreur modif : {e}")

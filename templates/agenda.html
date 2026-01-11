@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Agenda & Équipes</title>
+    <title>Agenda & Équipes (V2)</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js'></script>
@@ -91,38 +91,49 @@
 </form></div></div>
 
 <div class="modal fade" id="mEdit" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-warning">
-                <h5 class="modal-title">Modifier / Supprimer</h5>
+                <h5 class="modal-title">Détails & Historique</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form action="{{ url_for('modifier_evenement_complet', id_agenda=id_agenda) }}" method="POST">
                 <div class="modal-body">
                     <input type="hidden" name="id_event" id="edit_id">
-                    <label>Titre</label>
-                    <input type="text" name="titre" id="edit_titre" class="form-control mb-3" required>
                     
-                    <div class="row mb-3">
-                        <div class="col-6"><label>Début</label><input type="datetime-local" name="date_debut" id="edit_debut" class="form-control" required></div>
-                        <div class="col-6"><label>Fin</label><input type="datetime-local" name="date_fin" id="edit_fin" class="form-control" required></div>
+                    <div class="row">
+                        <div class="col-md-7 border-end">
+                            <h6 class="text-primary">Modifier</h6>
+                            <label>Titre</label>
+                            <input type="text" name="titre" id="edit_titre" class="form-control mb-2" required>
+                            <div class="row mb-2">
+                                <div class="col-6"><label>Début</label><input type="datetime-local" name="date_debut" id="edit_debut" class="form-control" required></div>
+                                <div class="col-6"><label>Fin</label><input type="datetime-local" name="date_fin" id="edit_fin" class="form-control" required></div>
+                            </div>
+                            
+                            <label>Équipe</label>
+                            {% if mon_info['role'] == 'Administrateur' %}
+                                <select name="id_equipe" id="edit_equipe_select" class="form-select mb-2">
+                                    <option value="">-- Général --</option>
+                                    {% for e in equipes %}<option value="{{ e[0] }}" data-nom="{{ e[1] }}">{{ e[1] }}</option>{% endfor %}
+                                </select>
+                            {% else %}
+                                <input type="text" id="edit_equipe_display" class="form-control mb-2" disabled>
+                                <input type="hidden" name="id_equipe" id="edit_equipe_hidden">
+                            {% endif %}
+                            
+                            <label>Description</label>
+                            <textarea name="description" id="edit_desc" class="form-control" rows="3"></textarea>
+                        </div>
+                        
+                        <div class="col-md-5">
+                            <h6 class="text-success"><i class="fas fa-history"></i> Historique (V2)</h6>
+                            <div id="histContent" class="small overflow-auto" style="max-height: 300px; background: #f8f9fa; padding: 5px; border-radius: 5px;">
+                                Chargement...
+                            </div>
+                        </div>
                     </div>
 
-                    <label>Équipe</label>
-                    {% if mon_info['role'] == 'Administrateur' %}
-                        <select name="id_equipe" id="edit_equipe_select" class="form-select mb-3">
-                            <option value="">-- Événement Général --</option>
-                            {% for e in equipes %}
-                                <option value="{{ e[0] }}" data-nom="{{ e[1] }}">{{ e[1] }}</option>
-                            {% endfor %}
-                        </select>
-                    {% else %}
-                        <input type="text" id="edit_equipe_display" class="form-control mb-3" disabled>
-                        <input type="hidden" name="id_equipe" id="edit_equipe_hidden">
-                    {% endif %}
-
-                    <label>Description</label>
-                    <textarea name="description" id="edit_desc" class="form-control mb-3" rows="3"></textarea>
                 </div>
                 <div class="modal-footer d-flex justify-content-between">
                     <button type="button" class="btn btn-danger" onclick="confirmerSuppression()"><i class="fas fa-trash"></i> Supprimer</button>
@@ -141,28 +152,18 @@ document.addEventListener('DOMContentLoaded', function() {
         events: '/api/events/{{id_agenda}}', editable: true, droppable: true,
         
         eventClick: function(info) {
-            if (!info.event.startEditable) { alert("Vous n'avez pas les droits."); return; }
-            
+            // 1. Remplissage Formulaire
             document.getElementById('edit_id').value = info.event.id;
             document.getElementById('edit_titre').value = info.event.title;
             document.getElementById('edit_desc').value = info.event.extendedProps.description || "";
             
-            // Gestion de l'équipe dans le modal
             var nomEquipe = info.event.extendedProps.equipe || "Général";
-            // Pour l'admin : on essaie de sélectionner la bonne option dans le select
             var selectEq = document.getElementById('edit_equipe_select');
             if(selectEq) {
-                selectEq.value = ""; // Reset à général
-                for(var i=0; i<selectEq.options.length; i++) {
-                    if(selectEq.options[i].text === nomEquipe) {
-                        selectEq.selectedIndex = i;
-                        break;
-                    }
-                }
+                selectEq.value = ""; 
+                for(var i=0; i<selectEq.options.length; i++) { if(selectEq.options[i].text === nomEquipe) selectEq.selectedIndex = i; }
             } else {
-                // Pour le chef : affichage simple
                 document.getElementById('edit_equipe_display').value = nomEquipe;
-                // On met une valeur dummy pour le hidden (le serveur ignorera de toute façon pour le chef)
                 document.getElementById('edit_equipe_hidden').value = ""; 
             }
 
@@ -170,6 +171,32 @@ document.addEventListener('DOMContentLoaded', function() {
             var end = info.event.end ? toIsoString(info.event.end) : start;
             document.getElementById('edit_debut').value = start;
             document.getElementById('edit_fin').value = end;
+
+            // 2. CHARGEMENT HISTORIQUE (AJAX V2)
+            var histDiv = document.getElementById('histContent');
+            histDiv.innerHTML = '<div class="text-center text-muted">...</div>';
+            
+            fetch('/api/historique/{{id_agenda}}/' + info.event.id)
+            .then(r => r.json())
+            .then(data => {
+                histDiv.innerHTML = '';
+                if(data.status === 'ok') {
+                    if(data.data.length === 0) histDiv.innerHTML = 'Aucun historique.';
+                    else {
+                        data.data.forEach(h => {
+                            histDiv.innerHTML += `
+                                <div class="border-bottom mb-1 pb-1">
+                                    <strong>${h.action}</strong> <span class="text-muted" style="font-size:0.8em">${h.date}</span><br>
+                                    ${h.details}<br>
+                                    <i class="fas fa-user"></i> ${h.auteur}
+                                </div>
+                            `;
+                        });
+                    }
+                } else {
+                    histDiv.innerHTML = '<span class="text-danger">Non autorisé.</span>';
+                }
+            });
 
             document.getElementById('formDelete').action = "/agenda/{{id_agenda}}/supprimer_evenement_complet/" + info.event.id;
             new bootstrap.Modal(document.getElementById('mEdit')).show();

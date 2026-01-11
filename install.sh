@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-# INSTALLATION COMPLÈTE (PYTHON + BASE DE DONNÉES)
+# INSTALLATION COMPLÈTE (PYTHON + BASE DE DONNÉES V2)
 # ==============================================================================
 
 GREEN='\033[0;32m'
@@ -11,7 +11,7 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 echo -e "${BLUE}##########################################################${NC}"
-echo -e "${BLUE}#      INSTALLATION AUTOMATISÉE DE L'AGENDA              #${NC}"
+echo -e "${BLUE}#      INSTALLATION AUTOMATISÉE DE L'AGENDA (V2)         #${NC}"
 echo -e "${BLUE}##########################################################${NC}"
 
 # --- ÉTAPE 1 : PYTHON & LIBRAIRIES ---
@@ -25,47 +25,40 @@ python3 -m venv venv 2> /dev/null
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✅ Venv créé.${NC}"
     ./venv/bin/pip install --upgrade pip > /dev/null
-    ./venv/bin/pip install flask psycopg2-binary python-dotenv > /dev/null
+    ./venv/bin/pip install flask psycopg2-binary > /dev/null
     CMD_PYTHON="./venv/bin/python3"
 else
     echo -e "${YELLOW}⚠️ Venv impossible. Installation utilisateur.${NC}"
-    pip3 install --user flask psycopg2-binary python-dotenv --break-system-packages > /dev/null 2>&1 || pip3 install --user flask psycopg2-binary python-dotenv
+    pip3 install --user flask psycopg2-binary --break-system-packages > /dev/null 2>&1 || pip3 install --user flask psycopg2-binary
     CMD_PYTHON="python3"
 fi
 
-# --- ÉTAPE 2 : CONFIGURATION BASE DE DONNÉES (AUTO) ---
+# --- ÉTAPE 2 : CONFIGURATION BASE DE DONNÉES ---
 echo -e "\n${YELLOW}--- 2. Configuration PostgreSQL ---${NC}"
 
-# On vérifie si on a le fichier SQL sous la main
-if [ ! -f "agenda_collab_db.sql" ]; then
-    echo -e "${RED}❌ ERREUR : Le fichier 'agenda_collab_db.sql' est introuvable !${NC}"
-    echo "Impossible d'initialiser la base de données sans ce fichier."
+# A. Création Utilisateur et Database (Nécessite Sudo)
+# Cette partie crée l'utilisateur 'app_agenda_user' et la BDD si elles n'existent pas
+if sudo -n true 2>/dev/null || sudo -v 2>/dev/null; then
+    echo "Droits Sudo détectés. Vérification du compte et de la BDD..."
+    sudo -u postgres psql -c "CREATE USER app_agenda_user WITH PASSWORD 'Azerty@123';" 2>/dev/null || echo "   -> Utilisateur déjà présent."
+    sudo -u postgres psql -c "CREATE DATABASE agenda_collaboratif OWNER app_agenda_user;" 2>/dev/null || echo "   -> Base de données déjà présente."
 else
-    # On teste si on a sudo pour configurer postgres
-    if sudo -n true 2>/dev/null || sudo -v 2>/dev/null; then
-        echo "Droits Sudo détectés. Configuration de la BDD..."
+    echo -e "${YELLOW}⚠️ Pas de droits Sudo : Assurez-vous que la BDD 'agenda_collaboratif' existe déjà.${NC}"
+fi
 
-        # 1. Création de l'utilisateur (ignore l'erreur s'il existe déjà)
-        sudo -u postgres psql -c "CREATE USER app_agenda_user WITH PASSWORD 'Azerty@123';" 2>/dev/null || echo "   -> L'utilisateur existe déjà."
+# B. Création des Tables via le script Python (Remplace le fichier .sql)
+echo -e "Injection des tables (V1 + Historique V2)..."
 
-        # 2. Création de la BDD (ignore l'erreur si elle existe déjà)
-        sudo -u postgres psql -c "CREATE DATABASE agenda_collaboratif OWNER app_agenda_user;" 2>/dev/null || echo "   -> La base existe déjà."
-
-        # 3. Injection des tables depuis le fichier SQL
-        echo "Injection des tables..."
-        # L'export permet d'éviter que psql demande le mot de passe
-        export PGPASSWORD='Azerty@123'
-        psql -h localhost -U app_agenda_user -d agenda_collaboratif -f agenda_collab_db.sql > /dev/null 2>&1
-        
-        if [ $? -eq 0 ]; then
-            echo -e "${GREEN}✅ Tables créées avec succès !${NC}"
-        else
-            echo -e "${RED}❌ Erreur lors de l'injection SQL (Vérifiez le fichier .sql).${NC}"
-        fi
+if [ -f "init_db.py" ]; then
+    # C'est ICI que la magie opère : on lance le script Python qu'on a créé juste avant
+    $CMD_PYTHON init_db.py
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ Tables initialisées avec succès !${NC}"
     else
-        echo -e "${YELLOW}⚠️ Pas de droits Sudo : La configuration BDD automatique est sautée.${NC}"
-        echo "Vous devrez créer la base manuellement ou utiliser SQLite."
+        echo -e "${RED}❌ Erreur lors de l'exécution de init_db.py${NC}"
     fi
+else
+    echo -e "${RED}❌ ERREUR : Le fichier 'init_db.py' est introuvable !${NC}"
 fi
 
 # --- ÉTAPE 3 : FINITION ---
