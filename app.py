@@ -2,6 +2,33 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from agenda_collab import BaseDeDonnees
 from datetime import datetime
 import re 
+import socket
+
+# Configuration des cibles 
+SERVEUR_IP = "127.0.0.1" # localhost 
+PORT_TCP_LOGS = 9000 
+PORT_UDP_NOTIFS = 9001
+
+def envoyer_tcp_critique(message):
+    """Envoie un message important via TCP (fiable, connecté)"""
+    try:
+        # Création socket TCP
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((SERVEUR_IP, PORT_TCP_LOGS))
+        s.send(message.encode('utf-8'))
+        s.close()
+    except Exception as e:
+        print(f"Erreur envoi TCP: {e}")
+
+def envoyer_udp_rapide(message):
+    """Envoie une notification légère via UDP (non connecté, rapide)"""
+    try:
+        # Création socket UDP
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.sendto(message.encode('utf-8'), (SERVEUR_IP, PORT_UDP_NOTIFS)) # [cite: 923]
+        s.close()
+    except:
+        pass # UDP ne garantit pas l'arrivée, on ignore les erreurs
 
 app = Flask(__name__)
 app.secret_key = 'cle_secrete_projet_agenda'
@@ -43,6 +70,9 @@ def register():
         resultat = bdd.ajouter_utilisateur(pseudo, "User", mdp)
         
         if resultat == "OK":
+            # [TCP] On loggue l'inscription de manière fiable
+            envoyer_tcp_critique(f"AUTH: Nouvel utilisateur inscrit : {pseudo}")
+            
             flash("Compte créé ! Connectez-vous.")
             return redirect(url_for('login'))
         elif resultat == "ExisteDeja":
@@ -80,6 +110,10 @@ def logout():
 def nouveau_agenda():
     if 'user_id' in session:
         bdd.creer_agenda(request.form['nom_agenda'], session['user_id'])
+
+        # [TCP] Création importante
+        envoyer_tcp_critique(f"ADMIN: Agenda '{request.form['nom_agenda']}' créé par ID {session['user_id']}")
+
         flash("Agenda créé !")
     return redirect(url_for('index'))
 
@@ -177,6 +211,10 @@ def nouvel_evenement(id_agenda):
     res = bdd.ajouter_evenement(request.form['titre'], request.form['description'], 
                                 request.form['date_debut'], request.form['date_fin'], 
                                 id_agenda, id_equipe_cible, session['user_id'])
+    if res == "OK":
+        # [UDP] Notification rapide qu'un ticket est arrivé
+        envoyer_udp_rapide(f"EVENT: Nouveau ticket '{request.form['titre']}' (Agenda {id_agenda})")
+    
     if res == "ConflitDetecte": flash("⚠️ Conflit d'horaire !")
     return redirect(url_for('voir_agenda', id_agenda=id_agenda))
 
@@ -242,7 +280,10 @@ def api_move_event():
     if 'user_id' not in session: return jsonify({'status': 'error'})
     data = request.json
     res = bdd.modifier_dates_evenement(data['id'], data['start'][:16].replace('T', ' '), data['end'][:16].replace('T', ' '), session['user_id'])
-    if res == "OK": return jsonify({'status': 'ok'})
+    if res == "OK": 
+        # UDP] Log très rapide du mouvement
+        envoyer_udp_rapide(f"MOUVEMENT: Ticket {data['id']} déplacé par User {session['user_id']}")
+        return jsonify({'status': 'ok'})
     elif res == "Conflit": return jsonify({'status': 'conflict', 'message': 'Conflit.'})
     return jsonify({'status': 'error'})
 
