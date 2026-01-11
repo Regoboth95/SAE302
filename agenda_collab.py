@@ -33,31 +33,45 @@ class BaseDeDonnees:
         return None
 
     def ajouter_utilisateur(self, nom, prenom, mdp):
-        sql = "INSERT INTO gestion_agenda.UTILISATEUR (nom, prenom, mot_de_passe) VALUES (%s, %s, %s) RETURNING id_user;"
         conn = self.get_connection()
         if conn:
             try:
                 with conn:
                     with conn.cursor() as cur:
+                        # 1. VERIFICATION DOUBLON (Nouveau)
+                        cur.execute("SELECT count(*) FROM gestion_agenda.UTILISATEUR WHERE nom = %s", (nom,))
+                        if cur.fetchone()[0] > 0:
+                            return "ExisteDeja"
+
+                        # 2. INSERTION
+                        sql = "INSERT INTO gestion_agenda.UTILISATEUR (nom, prenom, mot_de_passe) VALUES (%s, %s, %s) RETURNING id_user;"
                         cur.execute(sql, (nom, prenom, mdp))
-                        return cur.fetchone()[0]
-            except: pass
+                        return "OK"
+            except Exception as e:
+                print(e)
+                return "Erreur"
             finally:
                 conn.close()
-        return None
+        return "Erreur"
     
     def modifier_mot_de_passe(self, id_user, nouveau_mdp):
-        """ (NOUVEAU) Change le mot de passe de l'utilisateur """
         conn = self.get_connection()
         if conn:
             try:
                 with conn:
                     with conn.cursor() as cur:
+                        # 1. RECUPERER ANCIEN MDP (Nouveau)
+                        cur.execute("SELECT mot_de_passe FROM gestion_agenda.UTILISATEUR WHERE id_user = %s", (id_user,))
+                        res = cur.fetchone()
+                        if res and res[0] == nouveau_mdp:
+                            return "MemeMdp" # C'est le même !
+
+                        # 2. UPDATE
                         cur.execute("UPDATE gestion_agenda.UTILISATEUR SET mot_de_passe = %s WHERE id_user = %s", (nouveau_mdp, id_user))
-                        return True
-            except: return False
+                        return "OK"
+            except: return "Erreur"
             finally: conn.close()
-        return False
+        return "Erreur"
 
     # --- AGENDAS & PARTICIPATION ---
     def recuperer_agendas_utilisateur(self, id_user):
@@ -143,7 +157,6 @@ class BaseDeDonnees:
         return "ErreurConnexion"
     
     def modifier_equipe_membre(self, id_agenda, id_user_cible, id_new_equipe):
-        """ (NOUVEAU) Change l'équipe d'un membre existant """
         conn = self.get_connection()
         if conn:
             try:

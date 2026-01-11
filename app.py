@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 from agenda_collab import BaseDeDonnees
 from datetime import datetime
-import re  # Pour le Regex du mot de passe
+import re 
 
 app = Flask(__name__)
 app.secret_key = 'cle_secrete_projet_agenda'
@@ -34,16 +34,22 @@ def register():
         pseudo = request.form['pseudo']
         mdp = request.form['password']
         
-        # (NOUVEAU) Vérification Robustesse Mot de Passe
-        # 8 caractères min, 1 Majuscule, 1 Chiffre, 1 Caractère spécial
+        # Vérif Robustesse
         if len(mdp) < 8 or not re.search(r"\d", mdp) or not re.search(r"[A-Z]", mdp) or not re.search(r"[\W_]", mdp):
-            flash("⚠️ Mot de passe faible ! Il faut : 8 caractères, 1 Majuscule, 1 Chiffre, 1 Symbole.")
+            flash("⚠️ Mot de passe faible ! (8 carac, 1 Maj, 1 Chiffre, 1 Symbole)")
             return render_template('login.html', mode='register')
 
-        if bdd.ajouter_utilisateur(pseudo, "User", mdp):
+        # Appel BDD
+        resultat = bdd.ajouter_utilisateur(pseudo, "User", mdp)
+        
+        if resultat == "OK":
             flash("Compte créé ! Connectez-vous.")
             return redirect(url_for('login'))
-        flash("Erreur pseudo.")
+        elif resultat == "ExisteDeja":
+            flash("⛔ Ce pseudo est déjà utilisé. Veuillez en choisir un autre.")
+        else:
+            flash("Erreur technique.")
+            
     return render_template('login.html', mode='register')
 
 @app.route('/changer_mot_de_passe', methods=['POST'])
@@ -51,16 +57,18 @@ def changer_mot_de_passe():
     if 'user_id' not in session: return redirect(url_for('login'))
     
     nouveau_mdp = request.form['nouveau_mdp']
-    # Vérification Robustesse aussi ici
+    
     if len(nouveau_mdp) < 8 or not re.search(r"\d", nouveau_mdp) or not re.search(r"[A-Z]", nouveau_mdp) or not re.search(r"[\W_]", nouveau_mdp):
         flash("⚠️ Mot de passe trop faible.")
     else:
-        if bdd.modifier_mot_de_passe(session['user_id'], nouveau_mdp):
+        res = bdd.modifier_mot_de_passe(session['user_id'], nouveau_mdp)
+        if res == "OK":
             flash("✅ Mot de passe modifié avec succès !")
+        elif res == "MemeMdp":
+            flash("⚠️ Le nouveau mot de passe est identique à l'ancien !")
         else:
             flash("❌ Erreur lors de la modification.")
             
-    # On redirige vers la page d'où on vient (Referer) ou l'index
     return redirect(request.referrer or url_for('index'))
 
 @app.route('/logout')
@@ -127,15 +135,12 @@ def inviter_membre(id_agenda):
 
 @app.route('/agenda/<int:id_agenda>/modifier_membre_equipe', methods=['POST'])
 def modifier_membre_equipe(id_agenda):
-    """ (NOUVEAU) Change l'équipe d'un membre existant """
     if 'user_id' not in session: return redirect(url_for('login'))
-    
     infos = bdd.recuperer_infos_membre(session['user_id'], id_agenda)
-    # Seul l'admin peut changer l'équipe d'un membre
     if infos['role'] == 'Administrateur':
         id_user_cible = request.form['id_user_cible']
         id_new_equipe = request.form['id_new_equipe']
-        if id_new_equipe == "": id_new_equipe = None # Si "Aucune" choisi
+        if id_new_equipe == "": id_new_equipe = None
         
         if bdd.modifier_equipe_membre(id_agenda, id_user_cible, id_new_equipe):
             flash("Équipe du membre modifiée.")
@@ -143,7 +148,6 @@ def modifier_membre_equipe(id_agenda):
             flash("Erreur modification membre.")
     else:
         flash("⛔ Seul l'Admin peut modifier les membres.")
-        
     return redirect(url_for('voir_agenda', id_agenda=id_agenda))
 
 @app.route('/agenda/<int:id_agenda>/supprimer_membre/<int:id_membre>', methods=['POST'])
