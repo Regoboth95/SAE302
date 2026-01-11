@@ -45,6 +45,19 @@ class BaseDeDonnees:
             finally:
                 conn.close()
         return None
+    
+    def modifier_mot_de_passe(self, id_user, nouveau_mdp):
+        """ (NOUVEAU) Change le mot de passe de l'utilisateur """
+        conn = self.get_connection()
+        if conn:
+            try:
+                with conn:
+                    with conn.cursor() as cur:
+                        cur.execute("UPDATE gestion_agenda.UTILISATEUR SET mot_de_passe = %s WHERE id_user = %s", (nouveau_mdp, id_user))
+                        return True
+            except: return False
+            finally: conn.close()
+        return False
 
     # --- AGENDAS & PARTICIPATION ---
     def recuperer_agendas_utilisateur(self, id_user):
@@ -128,6 +141,20 @@ class BaseDeDonnees:
             finally:
                 conn.close()
         return "ErreurConnexion"
+    
+    def modifier_equipe_membre(self, id_agenda, id_user_cible, id_new_equipe):
+        """ (NOUVEAU) Change l'équipe d'un membre existant """
+        conn = self.get_connection()
+        if conn:
+            try:
+                with conn:
+                    with conn.cursor() as cur:
+                        sql = "UPDATE gestion_agenda.PARTICIPATION SET id_equipe = %s WHERE id_agenda = %s AND id_user = %s;"
+                        cur.execute(sql, (id_new_equipe, id_agenda, id_user_cible))
+                        return True
+            except: return False
+            finally: conn.close()
+        return False
 
     def recuperer_participants(self, id_agenda):
         sql = """
@@ -194,32 +221,24 @@ class BaseDeDonnees:
                 conn.close()
         return []
 
-    # --- HISTORIQUE (NOUVEAU V2) ---
+    # --- HISTORIQUE ---
     def ajouter_historique(self, id_event, action, details, id_user):
-        """ Enregistre une action (Création, Modif...) dans l'historique """
-        sql = """
-            INSERT INTO gestion_agenda.HISTORIQUE (id_event, action, details, id_user)
-            VALUES (%s, %s, %s, %s);
-        """
+        sql = "INSERT INTO gestion_agenda.HISTORIQUE (id_event, action, details, id_user) VALUES (%s, %s, %s, %s);"
         conn = self.get_connection()
         if conn:
             try:
                 with conn:
                     with conn.cursor() as cur:
                         cur.execute(sql, (id_event, action, details, id_user))
-            except Exception as e:
-                print(f"Erreur historique : {e}")
-            finally:
-                conn.close()
+            except: pass
+            finally: conn.close()
 
     def recuperer_historique(self, id_event):
-        """ Récupère la liste des actions pour un ticket """
         sql = """
             SELECT H.action, H.details, to_char(H.date_action, 'DD/MM/YYYY HH24:MI'), U.nom
             FROM gestion_agenda.HISTORIQUE H
             LEFT JOIN gestion_agenda.UTILISATEUR U ON H.id_user = U.id_user
-            WHERE H.id_event = %s
-            ORDER BY H.date_action DESC;
+            WHERE H.id_event = %s ORDER BY H.date_action DESC;
         """
         conn = self.get_connection()
         if conn:
@@ -227,13 +246,11 @@ class BaseDeDonnees:
                 with conn.cursor() as cur:
                     cur.execute(sql, (id_event,))
                     return cur.fetchall()
-            finally:
-                conn.close()
+            finally: conn.close()
         return []
 
-    # --- ÉVÉNEMENTS (Avec Tracabilité V2) ---
+    # --- ÉVÉNEMENTS ---
     def recuperer_info_event_basic(self, id_event):
-        """ Récupère l'équipe de l'event pour vérif sécurité """
         sql = "SELECT id_equipe_concernee FROM gestion_agenda.EVENEMENT WHERE id_event = %s"
         conn = self.get_connection()
         if conn:
@@ -242,8 +259,7 @@ class BaseDeDonnees:
                     cur.execute(sql, (id_event,))
                     res = cur.fetchone()
                     return res[0] if res else None
-            finally:
-                conn.close()
+            finally: conn.close()
         return None
 
     def ajouter_evenement(self, titre, desc, debut, fin, id_agenda, id_equipe, id_createur):
@@ -252,39 +268,22 @@ class BaseDeDonnees:
             try:
                 with conn:
                     with conn.cursor() as cur:
-                        # 1. Vérif Conflits
                         if id_equipe is not None:
                             sql_check = """
                                 SELECT count(*) FROM gestion_agenda.EVENEMENT
                                 WHERE id_agenda = %s AND id_equipe_concernee = %s
-                                AND (
-                                    (date_debut <= %s AND date_fin >= %s) OR
-                                    (date_debut <= %s AND date_fin >= %s) OR
-                                    (date_debut >= %s AND date_fin <= %s)
-                                );
+                                AND ((date_debut <= %s AND date_fin >= %s) OR (date_debut <= %s AND date_fin >= %s) OR (date_debut >= %s AND date_fin <= %s));
                             """
                             cur.execute(sql_check, (id_agenda, id_equipe, debut, debut, fin, fin, debut, fin))
                             if cur.fetchone()[0] > 0: return "ConflitDetecte"
 
-                        # 2. Insertion
-                        sql = """
-                            INSERT INTO gestion_agenda.EVENEMENT 
-                            (titre, description, date_debut, date_fin, id_agenda, id_equipe_concernee, id_createur)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s)
-                            RETURNING id_event;
-                        """
+                        sql = "INSERT INTO gestion_agenda.EVENEMENT (titre, description, date_debut, date_fin, id_agenda, id_equipe_concernee, id_createur) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id_event;"
                         cur.execute(sql, (titre, desc, debut, fin, id_agenda, id_equipe, id_createur))
                         new_id = cur.fetchone()[0]
-                        
-                        # 3. HISTORIQUE (V2)
                         self.ajouter_historique(new_id, "Création", f"Ticket créé : {titre}", id_createur)
-                        
                         return "OK"
-            except Exception as e:
-                print(e)
-                return "ErreurTech"
-            finally:
-                conn.close()
+            except: return "ErreurTech"
+            finally: conn.close()
         return "ErreurConnexion"
 
     def recuperer_evenements_filtres(self, id_agenda, role_user, id_equipe_user):
@@ -311,12 +310,10 @@ class BaseDeDonnees:
                         """
                         cur.execute(sql, (id_agenda, id_equipe_user))
                     return cur.fetchall()
-            finally:
-                conn.close()
+            finally: conn.close()
         return []
 
     def modifier_dates_evenement(self, id_event, nouv_debut, nouv_fin, id_user_modif):
-        """ Modifie date (Drag&Drop) et loggue l'historique """
         conn = self.get_connection()
         if conn:
             try:
@@ -328,63 +325,36 @@ class BaseDeDonnees:
                         id_agenda, id_equipe = info
 
                         if id_equipe is not None:
-                            sql_check = """
-                                SELECT count(*) FROM gestion_agenda.EVENEMENT
-                                WHERE id_agenda = %s AND id_equipe_concernee = %s
-                                AND id_event != %s 
-                                AND ((date_debut < %s AND date_fin > %s));
-                            """
+                            sql_check = "SELECT count(*) FROM gestion_agenda.EVENEMENT WHERE id_agenda = %s AND id_equipe_concernee = %s AND id_event != %s AND ((date_debut < %s AND date_fin > %s));"
                             cur.execute(sql_check, (id_agenda, id_equipe, id_event, nouv_fin, nouv_debut))
                             if cur.fetchone()[0] > 0: return "Conflit"
 
                         cur.execute("UPDATE gestion_agenda.EVENEMENT SET date_debut = %s, date_fin = %s WHERE id_event = %s;", (nouv_debut, nouv_fin, id_event))
-                        
-                        # HISTORIQUE (V2)
                         self.ajouter_historique(id_event, "Déplacement", f"Nouv. horaire : {nouv_debut}", id_user_modif)
-                        
                         return "OK"
             except: return "Erreur"
             finally: conn.close()
         return "Erreur"
 
     def modifier_infos_evenement(self, id_event, titre, description, debut, fin, id_nouvelle_equipe, id_user_modif):
-        """ Modifie infos/équipe et loggue l'historique """
         conn = self.get_connection()
         if conn:
             try:
                 with conn:
                     with conn.cursor() as cur:
                         if id_nouvelle_equipe is not None:
-                            sql_check = """
-                                SELECT count(*) FROM gestion_agenda.EVENEMENT 
-                                WHERE id_agenda = (SELECT id_agenda FROM gestion_agenda.EVENEMENT WHERE id_event = %s)
-                                AND id_equipe_concernee = %s 
-                                AND id_event != %s 
-                                AND ((date_debut < %s AND date_fin > %s));
-                            """
+                            sql_check = "SELECT count(*) FROM gestion_agenda.EVENEMENT WHERE id_agenda = (SELECT id_agenda FROM gestion_agenda.EVENEMENT WHERE id_event = %s) AND id_equipe_concernee = %s AND id_event != %s AND ((date_debut < %s AND date_fin > %s));"
                             cur.execute(sql_check, (id_event, id_nouvelle_equipe, id_event, fin, debut))
                             if cur.fetchone()[0] > 0: return "Conflit"
 
-                        sql = """
-                            UPDATE gestion_agenda.EVENEMENT 
-                            SET titre=%s, description=%s, date_debut=%s, date_fin=%s, id_equipe_concernee=%s 
-                            WHERE id_event=%s;
-                        """
-                        cur.execute(sql, (titre, description, debut, fin, id_nouvelle_equipe, id_event))
-                        
-                        # HISTORIQUE (V2)
+                        cur.execute("UPDATE gestion_agenda.EVENEMENT SET titre=%s, description=%s, date_debut=%s, date_fin=%s, id_equipe_concernee=%s WHERE id_event=%s;", (titre, description, debut, fin, id_nouvelle_equipe, id_event))
                         self.ajouter_historique(id_event, "Modification", "Détails ou Équipe mis à jour", id_user_modif)
-                        
                         return "OK"
-            except Exception as e:
-                print(f"Erreur modif : {e}")
-                return "Erreur"
-            finally:
-                conn.close()
+            except: return "Erreur"
+            finally: conn.close()
         return "Erreur"
 
     def supprimer_evenement(self, id_event):
-        """ Supprime un événement """
         conn = self.get_connection()
         if conn:
             try:

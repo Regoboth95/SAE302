@@ -9,6 +9,7 @@
         body { background-color: #f8f9fa; }
         .card-agenda { transition: transform 0.2s; }
         .card-agenda:hover { transform: translateY(-5px); }
+        .profile-link:hover { text-decoration: underline !important; opacity: 0.9; }
     </style>
 </head>
 <body>
@@ -17,7 +18,12 @@
         <div class="container">
             <a class="navbar-brand fw-bold" href="#"><i class="fas fa-calendar-alt"></i> Agenda R&T</a>
             <div class="d-flex text-white align-items-center gap-3">
-                <span><i class="fas fa-user-circle"></i> {{ pseudo }}</span>
+                <a href="#" data-bs-toggle="modal" data-bs-target="#mChangeMdp" class="text-white text-decoration-none fw-bold profile-link">
+                    <i class="fas fa-user-circle"></i> {{ pseudo }} <i class="fas fa-pen-square small"></i>
+                </a>
+                
+                <span class="text-white-50">|</span>
+                
                 <a href="{{ url_for('logout') }}" class="btn btn-sm btn-light text-primary fw-bold">Déconnexion</a>
             </div>
         </div>
@@ -27,7 +33,7 @@
         
         {% with messages = get_flashed_messages() %}
             {% if messages %}
-                <div class="alert alert-success alert-dismissible fade show">
+                <div class="alert alert-info alert-dismissible fade show">
                     {{ messages[0] }}
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
@@ -85,6 +91,34 @@
                     </div>
                 {% endif %}
             </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="mChangeMdp" tabindex="-1">
+        <div class="modal-dialog">
+            <form class="modal-content" action="{{ url_for('changer_mot_de_passe') }}" method="POST">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="fas fa-key"></i> Sécurité du compte</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <h6>Changer de mot de passe</h6>
+                    <div class="alert alert-light border small text-muted">
+                        <i class="fas fa-info-circle"></i> Le mot de passe doit contenir :
+                        <ul class="mb-0 ps-3">
+                            <li>Au moins 8 caractères</li>
+                            <li>Au moins 1 Majuscule</li>
+                            <li>Au moins 1 Chiffre</li>
+                            <li>Au moins 1 Caractère spécial</li>
+                        </ul>
+                    </div>
+                    <input type="password" name="nouveau_mdp" class="form-control" placeholder="Nouveau mot de passe" required>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button class="btn btn-primary">Enregistrer</button>
+                </div>
+            </form>
         </div>
     </div>
 
