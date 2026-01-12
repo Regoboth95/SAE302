@@ -5,7 +5,7 @@
     --logo-blue: #2FA4D9;
     --logo-green: #8BC540;
     --logo-dark-green: #1E6047; /* Pour les survols */
-    --bg-light: #F0F4F8;
+    --bg-light: #efeacc;
     --white: #ffffff;
     --text-dark: #333333;
 }
@@ -19,7 +19,7 @@ body {
 /* --- HEADER (Le bandeau du haut) --- */
 header {
     /* Un dégradé du bleu vers le vert comme votre logo */
-    background: linear-gradient(90deg, var(--logo-dark-green) 0%, var(--logo-blue) 100%);
+    background: linear-gradient(90deg, var(--logo-blue) 0%, var(--logo-green) 100%);
     color: var(--white);
     padding: 15px 30px;
     box-shadow: 0 2px 10px rgba(0,0,0,0.1);
@@ -28,12 +28,6 @@ header {
     align-items: center;
 }
 
-/* Image du logo dans le header */
-.logo-img {
-    height: 40px; /* Ajustez la taille ici */
-    width: auto;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
-}
 /* Redéfinition des couleurs Bootstrap pour coller au logo */
 .bg-primary {
     background-color: var(--logo-blue) !important;
@@ -57,7 +51,9 @@ header {
 .btn-success:hover {
     background-color: #7ab332;
 }
-
+.btn-outline-secondary {
+    color: linear-gradient(90deg, var(--logo-blue) 0%, var(--logo-green) 100%);
+}
 /* Logo (classe utilitaire) */
 .logo-icon {
     height: 40px;
