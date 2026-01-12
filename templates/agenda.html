@@ -6,11 +6,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js'></script>
-    <style>
-        body{background:#f8f9fa} 
-        #calendar{background:white;padding:20px;border-radius:10px;box-shadow:0 4px 6px rgba(0,0,0,0.1)} 
-        .fc-event{cursor:pointer}
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 <div class="container-fluid mt-4">
@@ -197,25 +193,19 @@
 </div>
 
 <script>
-// Fonction pour ouvrir le modal de changement d'équipe membre
 function openMemberEdit(idUser, idEquipeActuelle) {
     document.getElementById('mem_id_user').value = idUser;
-    
-    // Sélectionner la bonne équipe dans la liste
     var select = document.getElementById('mem_select_equipe');
-    select.value = ""; // Reset à général (None)
-    
+    select.value = ""; 
     if (idEquipeActuelle && idEquipeActuelle !== 'None') {
         select.value = idEquipeActuelle;
     }
-    
     new bootstrap.Modal(document.getElementById('mMembreEdit')).show();
 }
 
 document.addEventListener('DOMContentLoaded', function() {
     var cal = new FullCalendar.Calendar(document.getElementById('calendar'), {
         initialView: 'timeGridWeek', locale: 'fr', 
-        // ICI : Ajout de timeGridDay dans le header
         headerToolbar: {left:'prev,next today', center:'title', right:'dayGridMonth,timeGridWeek,timeGridDay'},
         events: '/api/events/{{id_agenda}}', editable: true, droppable: true,
         
