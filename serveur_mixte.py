@@ -15,7 +15,7 @@ def afficher_safe(msg):
     with verrou_affichage: 
         print(msg)
 
-# --- PARTIE 1 : GESTIONNAIRE CLIENT TCP (Slide 44) ---
+# --- PARTIE 1 : GESTIONNAIRE CLIENT TCP ---
 class TCPClientHandler(Thread): 
     def __init__(self, sock, client_addr):
         Thread.__init__(self) 
@@ -31,7 +31,7 @@ class TCPClientHandler(Thread):
             message = data.decode('utf-8')
             afficher_safe(f"[TCP] Reçu : {message}")
             
-            # [cite_start]On répond (Protocole TCP mode connecté) 
+            # On répond (Protocole TCP mode connecté) 
             reponse = "Bien reçu par le serveur TCP central"
             self.sock.send(reponse.encode('utf-8'))
             
@@ -40,7 +40,7 @@ class TCPClientHandler(Thread):
         finally:
             self.sock.close()
 
-# --- PARTIE 2 : SERVEUR TCP PRINCIPAL (Slide 44 adapté) ---
+# --- PARTIE 2 : SERVEUR TCP PRINCIPAL ---
 class ServeurTCP(Thread):
     def __init__(self):
         Thread.__init__(self)
@@ -51,7 +51,7 @@ class ServeurTCP(Thread):
         self.sock.listen(5) 
         afficher_safe(f"🚀 Serveur TCP en écoute sur le port {TCP_PORT}...")
         
-        while True: # [cite: 884]
+        while True:
             try:
                 # Accepte la connexion et lance un thread dédié 
                 conn, addr = self.sock.accept() 
@@ -60,7 +60,7 @@ class ServeurTCP(Thread):
             except Exception as e:
                 afficher_safe(f"Erreur accept TCP: {e}")
 
-# --- PARTIE 3 : SERVEUR UDP (Slide 45 adapté en Thread) ---
+# --- PARTIE 3 : SERVEUR UDP ---
 class ServeurUDP(Thread):
     def __init__(self):
         Thread.__init__(self)
@@ -85,7 +85,7 @@ class ServeurUDP(Thread):
 
 # --- LANCEMENT ---
 if __name__ == "__main__":
-    print("--- Démarrage du Système Centralisé (Cours R309) ---")
+    print("--- Démarrage du Système Centralisé ---")
     
     # On lance les deux serveurs en parallèle grâce aux Threads
     thread_tcp = ServeurTCP()
