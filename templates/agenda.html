@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Agenda & Équipes (Final)</title>
+    <title>Agenda & Équipes</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js'></script>
@@ -11,7 +11,10 @@
 <body>
 <div class="container-fluid mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <a href="{{ url_for('index') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Retour</a>
+        <div class="d-flex align-items-center">
+            <img src="{{ url_for('static', filename='img/AgenColl.png') }}" alt="Logo" class="logo-icon">
+            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary"><i class="fas fa-arrow-left"></i> Retour au menu</a>
+        </div>
         
         <div>
             <span class="text-muted">Bonjour, </span>
@@ -21,67 +24,66 @@
             <span class="badge bg-dark ms-2">{{ mon_info['role'] }}</span>
         </div>
     </div>
+    
     {% with m=get_flashed_messages() %}{% if m %}<div class="alert alert-info">{{ m[0] }}</div>{% endif %}{% endwith %}
     
     <div class="row">
-        <div class="col-md-3 border-end">
-            <h5 class="text-primary">Équipes</h5>
-            <ul class="list-group mb-3">
-                {% for e in equipes %}
-                    <li class="list-group-item d-flex justify-content-between align-items-center" style="border-left:5px solid {{e[2]}}">
-                        <span class="fw-bold">{{e[1]}}</span>
-                        {% if mon_info['role'] == 'Administrateur' %}
-                        <form action="{{ url_for('supprimer_equipe', id_agenda=id_agenda, id_equipe=e[0]) }}" method="POST" onsubmit="return confirm('⚠️ Supprimer cette équipe ?');" style="margin:0;">
-                            <button type="submit" class="btn btn-link text-danger p-0 border-0"><i class="fas fa-trash-alt"></i></button>
-                        </form>
-                        {% endif %}
-                    </li>
-                {% endfor %}
-            </ul>
-            
-            {% if mon_info['role']=='Administrateur' %}
-            <form action="{{ url_for('nouvelle_equipe', id_agenda=id_agenda) }}" method="POST" class="mb-4 input-group">
-                <input type="text" name="nom_equipe" class="form-control" placeholder="Nom..." required>
-                <input type="color" name="couleur_equipe" class="form-control form-control-color" value="#0d6efd">
-                <button class="btn btn-primary">+</button>
-            </form>
-            {% endif %}
-
-            <h5 class="text-success">Membres</h5>
-            <ul class="list-group mb-3">
-                {% for m in membres %}
-                <li class="list-group-item d-flex justify-content-between align-items-center">
-                    <span>
-                        <i class="fas fa-user"></i> {{m[0]}} 
-                        <span class="badge bg-light text-dark">{{m[1]}}</span>
-                        {% if m[2] %}
-                            <span class="badge" style="background-color:{{m[3]}}; font-size:0.7em">{{m[2]}}</span>
-                        {% endif %}
-                    </span>
-                    
-                    <div class="d-flex align-items-center">
-                        {% if mon_info['role']=='Administrateur' and m[1]!='Administrateur' %}
-                            <button class="btn btn-link text-secondary p-0 me-2" onclick="openMemberEdit('{{m[4]}}', '{{m[5]}}')">
-                                <i class="fas fa-cog"></i>
-                            </button>
-                            
-                            {% if session['pseudo']!=m[0] %}
-                            <form action="{{ url_for('supprimer_membre', id_agenda=id_agenda, id_membre=m[4]) }}" method="POST" onsubmit="return confirm('Retirer ce membre ?')">
-                                <button class="btn btn-link text-danger p-0"><i class="fas fa-trash"></i></button>
+        <div class="col-md-3">
+            <div class="sidebar-agenda"> <h5 class="text-primary border-bottom pb-2">Équipes</h5>
+                <ul class="list-group list-group-flush mb-4">
+                    {% for e in equipes %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center ps-0" style="border-left:5px solid {{e[2]}}">
+                            <span class="fw-bold ms-2">{{e[1]}}</span>
+                            {% if mon_info['role'] == 'Administrateur' %}
+                            <form action="{{ url_for('supprimer_equipe', id_agenda=id_agenda, id_equipe=e[0]) }}" method="POST" onsubmit="return confirm('⚠️ Supprimer cette équipe ?');" style="margin:0;">
+                                <button type="submit" class="btn btn-link text-danger p-0 border-0"><i class="fas fa-trash-alt"></i></button>
                             </form>
                             {% endif %}
-                        {% endif %}
-                    </div>
-                </li>
-                {% endfor %}
-            </ul>
-            {% if mon_info['role']!='Collaborateur' %}<button class="btn btn-success w-100" data-bs-toggle="modal" data-bs-target="#mInv">Inviter</button>{% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
+                
+                {% if mon_info['role']=='Administrateur' %}
+                <form action="{{ url_for('nouvelle_equipe', id_agenda=id_agenda) }}" method="POST" class="mb-4 input-group">
+                    <input type="text" name="nom_equipe" class="form-control" placeholder="Nom..." required>
+                    <input type="color" name="couleur_equipe" class="form-control form-control-color" value="#0d6efd">
+                    <button class="btn btn-primary">+</button>
+                </form>
+                {% endif %}
+
+                <h5 class="text-success border-bottom pb-2">Membres</h5>
+                <ul class="list-group list-group-flush mb-3">
+                    {% for m in membres %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center ps-0">
+                        <span class="ms-2">
+                            <i class="fas fa-user text-muted"></i> {{m[0]}} 
+                            <span class="badge bg-light text-dark border">{{m[1]}}</span>
+                        </span>
+                        
+                        <div class="d-flex align-items-center">
+                            {% if mon_info['role']=='Administrateur' and m[1]!='Administrateur' %}
+                                <button class="btn btn-link text-secondary p-0 me-2" onclick="openMemberEdit('{{m[4]}}', '{{m[5]}}')">
+                                    <i class="fas fa-cog"></i>
+                                </button>
+                                
+                                {% if session['pseudo']!=m[0] %}
+                                <form action="{{ url_for('supprimer_membre', id_agenda=id_agenda, id_membre=m[4]) }}" method="POST" onsubmit="return confirm('Retirer ce membre ?')">
+                                    <button class="btn btn-link text-danger p-0"><i class="fas fa-trash"></i></button>
+                                </form>
+                                {% endif %}
+                            {% endif %}
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% if mon_info['role']!='Collaborateur' %}<button class="btn btn-success w-100 shadow-sm" data-bs-toggle="modal" data-bs-target="#mInv"><i class="fas fa-user-plus"></i> Inviter un membre</button>{% endif %}
+            </div>
         </div>
         
         <div class="col-md-9">
-            <div class="d-flex justify-content-between mb-3">
-                <h3>Planning Interactif</h3>
-                {% if mon_info['role']!='Collaborateur' %}<button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#mEvt">Nouveau Ticket</button>{% endif %}
+            <div class="d-flex justify-content-between mb-3 align-items-center">
+                <h3 class="text-primary">Planning Interactif</h3>
+                {% if mon_info['role']!='Collaborateur' %}<button class="btn btn-success shadow-sm" data-bs-toggle="modal" data-bs-target="#mEvt"><i class="fas fa-plus"></i> Nouveau Ticket</button>{% endif %}
             </div>
             <div id='calendar'></div>
         </div>
@@ -94,7 +96,6 @@
             <div class="modal-header bg-dark text-white"><h5 class="modal-title">Mon Profil</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <div class="modal-body">
                 <h6>Changer de mot de passe</h6>
-                <p class="small text-muted">Doit contenir 8 caractères, 1 Majuscule, 1 Chiffre, 1 Symbole.</p>
                 <input type="password" name="nouveau_mdp" class="form-control" placeholder="Nouveau mot de passe" required>
             </div>
             <div class="modal-footer">
