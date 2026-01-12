@@ -8,24 +8,24 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-<header>
-    <div class="container">
-        <a class="navbar-brand fw-bold" href="#">
-            <img src="{{ url_for('static', filename='img/AgenColl.png') }}" alt="Logo">
-            Agenda R&T
-        </a>
-        <div class="d-flex text-white align-items-center gap-3">
-            <a href="#" data-bs-toggle="modal" data-bs-target="#mChangeMdp" class="text-white text-decoration-none fw-bold profile-link">
-                <i class="fas fa-user-circle"></i> {{ pseudo }} <i class="fas fa-pen-square small"></i>
+    <header>
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="#">
+                <img src="{{ url_for('static', filename='img/AgenColl.png') }}" alt="Logo">
+                Agenda R&T
             </a>
+            <div class="d-flex text-white align-items-center gap-3">
+                <a href="#" data-bs-toggle="modal" data-bs-target="#mChangeMdp" class="text-white text-decoration-none fw-bold profile-link">
+                    <i class="fas fa-user-circle"></i> {{ pseudo }} <i class="fas fa-pen-square small"></i>
+                </a>
                 
-            <span class="text-white-50">|</span>
+                <span class="text-white-50">|</span>
                 
-            <a href="{{ url_for('logout') }}" class="btn btn-sm btn-light text-primary fw-bold">Déconnexion</a>
+                <a href="{{ url_for('logout') }}" class="btn btn-sm btn-light text-primary fw-bold">Déconnexion</a>
+            </div>
         </div>
-    </div>
-</header>
-<body>
+    </header>
+
     <div class="container">
         
         {% with messages = get_flashed_messages() %}

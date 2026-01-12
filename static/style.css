@@ -36,6 +36,7 @@ header {
     background-color: var(--logo-blue);
     border-color: var(--logo-blue);
 }
+
 .btn-primary:hover {
     background-color: #258bb8; /* Un peu plus foncé */
 }

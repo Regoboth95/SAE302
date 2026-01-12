@@ -9,27 +9,27 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-<header>
-<div class="container-fluid mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <div class="d-flex align-items-center">
-            <img src="{{ url_for('static', filename='img/AgenColl.png') }}" alt="Logo" class="logo-icon">
-            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary"><i class="fas fa-arrow-left"></i> Retour au menu</a>
-        </div>
+    <header>
+        <div class="container-fluid mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="d-flex align-items-center">
+                <img src="{{ url_for('static', filename='img/AgenColl.png') }}" alt="Logo" class="logo-icon">
+                <a href="{{ url_for('index') }}" class="btn btn-outline-secondary"><i class="fas fa-arrow-left"></i> Retour au menu</a>
+            </div>
         
-        <div>
-            <span class="text-muted">Bonjour, </span>
-            <a href="#" data-bs-toggle="modal" data-bs-target="#mChangeMdp" class="fw-bold text-dark text-decoration-none">
-                {{ session['pseudo'] }} <i class="fas fa-edit small text-primary"></i>
-            </a>
-            <span class="badge bg-dark ms-2">{{ mon_info['role'] }}</span>
+            <div>
+                <span class="text-muted">Bonjour, </span>
+                <a href="#" data-bs-toggle="modal" data-bs-target="#mChangeMdp" class="fw-bold text-dark text-decoration-none">
+                    {{ session['pseudo'] }} <i class="fas fa-edit small text-primary"></i>
+                </a>
+                <span class="badge bg-dark ms-2">{{ mon_info['role'] }}</span>
+            </div>
         </div>
-    </div>
-</div>  
-</header>
+        </div>  
+    </header>
 
     {% with m=get_flashed_messages() %}{% if m %}<div class="alert alert-info">{{ m[0] }}</div>{% endif %}{% endwith %}
-    
+
 <div class="container-fluid">   
     <div class="row">
         <div class="col-md-3">
