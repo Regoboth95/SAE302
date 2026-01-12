@@ -5,7 +5,7 @@
     --logo-blue: #2FA4D9;
     --logo-green: #8BC540;
     --logo-dark-green: #1E6047; /* Pour les survols */
-    --bg-light: #efeacc;
+    --bg-light: #f9f5e1;
     --white: #ffffff;
     --text-dark: #333333;
 }
@@ -26,6 +26,26 @@ header {
     display: flex;
     justify-content: space-between;
     align-items: center;
+}
+
+/* --- GESTION DU LOGO --- */
+
+/* 1. Le logo dans la barre de navigation (Dashboard et Agenda) */
+.logo-icon {
+    height: 40px !important; /* Force une petite taille */
+    width: auto;             /* Garde les proportions */
+    margin-right: 10px;
+    vertical-align: middle;
+}
+
+/* 2. Le logo sur la page de Connexion (Un peu plus grand) */
+.login-card-custom img {
+    height: 80px !important; /* Taille moyenne pour l'accueil */
+    width: auto;
+    margin-bottom: 20px;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
 }
 
 /* Redéfinition des couleurs Bootstrap pour coller au logo */
