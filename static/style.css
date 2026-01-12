@@ -1,0 +1,45 @@
+/* static/style.css */
+
+/* --- STYLE GLOBAL --- */
+body {
+    background-color: #f8f9fa; /* Couleur de fond gris clair commune */
+}
+
+/* --- SPÉCIFIQUE LOGIN (Style "Carte Centrée" - Photo 2) --- */
+/* On applique ce style uniquement si le body a la classe 'login-page' */
+body.login-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh; /* Prend toute la hauteur pour centrer verticalement */
+}
+
+.login-card-custom {
+    width: 100%;
+    max-width: 400px; /* Limite la largeur comme sur la photo */
+    border: none;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1); /* Ombre douce */
+}
+
+/* --- SPÉCIFIQUE DASHBOARD --- */
+.card-agenda {
+    transition: transform 0.2s;
+}
+.card-agenda:hover {
+    transform: translateY(-5px); /* Petit effet de saut au survol */
+}
+.profile-link:hover {
+    text-decoration: underline !important;
+    opacity: 0.9;
+}
+
+/* --- SPÉCIFIQUE AGENDA --- */
+#calendar {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+.fc-event {
+    cursor: pointer;
+}
