@@ -33,7 +33,8 @@
 <div class="container-fluid mt-4">   
     <div class="row">
         <div class="col-md-3">
-            <div class="sidebar-agenda"> <h5 class="text-primary border-bottom pb-2">Équipes</h5>
+            <div class="sidebar-agenda"> 
+                <h5 class="text-primary border-bottom pb-2">Équipes</h5>
                 <ul class="list-group list-group-flush mb-4">
                     {% for e in equipes %}
                         <li class="list-group-item d-flex justify-content-between align-items-center ps-0" style="border-left:5px solid {{e[2]}}">
@@ -198,6 +199,9 @@
 </div>
 
 <script>
+/**
+ * Ouvre le modal de modification d'équipe pour un membre spécifique
+ */
 function openMemberEdit(idUser, idEquipeActuelle) {
     document.getElementById('mem_id_user').value = idUser;
     var select = document.getElementById('mem_select_equipe');
@@ -209,16 +213,26 @@ function openMemberEdit(idUser, idEquipeActuelle) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    /**
+     * Initialisation de FullCalendar
+     */
     var cal = new FullCalendar.Calendar(document.getElementById('calendar'), {
-        initialView: 'timeGridWeek', locale: 'fr', 
+        initialView: 'timeGridWeek', 
+        locale: 'fr', 
         headerToolbar: {left:'prev,next today', center:'title', right:'dayGridMonth,timeGridWeek,timeGridDay'},
-        events: '/api/events/{{id_agenda}}', editable: true, droppable: true,
+        events: '/api/events/{{id_agenda}}', // Source des données (API Flask)
+        editable: true, 
+        droppable: true,
         
+        /**
+         * Action lors du clic sur un événement : Remplissage et affichage du modal d'édition
+         */
         eventClick: function(info) {
             document.getElementById('edit_id').value = info.event.id;
             document.getElementById('edit_titre').value = info.event.title;
             document.getElementById('edit_desc').value = info.event.extendedProps.description || "";
             
+            // Gestion de la sélection de l'équipe dans le modal
             var nomEquipe = info.event.extendedProps.equipe || "Général";
             var selectEq = document.getElementById('edit_equipe_select');
             if(selectEq) {
@@ -229,11 +243,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('edit_equipe_hidden').value = ""; 
             }
 
+            // Conversion des dates pour les inputs datetime-local
             var start = toIsoString(info.event.start);
             var end = info.event.end ? toIsoString(info.event.end) : start;
             document.getElementById('edit_debut').value = start;
             document.getElementById('edit_fin').value = end;
 
+            // Récupération de l'historique via l'API
             var histDiv = document.getElementById('histContent');
             histDiv.innerHTML = '<div class="text-center text-muted">...</div>';
             fetch('/api/historique/{{id_agenda}}/' + info.event.id).then(r => r.json()).then(data => {
@@ -244,18 +260,42 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else { histDiv.innerHTML = '<span class="text-danger">Non autorisé.</span>'; }
             });
 
+            // Mise à jour de l'URL du formulaire de suppression
             document.getElementById('formDelete').action = "/agenda/{{id_agenda}}/supprimer_evenement_complet/" + info.event.id;
             new bootstrap.Modal(document.getElementById('mEdit')).show();
         },
-        eventOverlap: function(still, moving) { return !(still.extendedProps.equipe === moving.extendedProps.equipe && still.extendedProps.equipe !== 'Général'); },
-        eventDrop: function(info) { save(info); }, eventResize: function(info) { save(info); }
+
+        /**
+         * Gestion des chevauchements d'événements (Interdit si même équipe, sauf si 'Général')
+         */
+        eventOverlap: function(still, moving) { 
+            return !(still.extendedProps.equipe === moving.extendedProps.equipe && still.extendedProps.equipe !== 'Général'); 
+        },
+
+        // Sauvegarde automatique lors du déplacement ou redimensionnement
+        eventDrop: function(info) { save(info); }, 
+        eventResize: function(info) { save(info); }
     });
 
+    /**
+     * Envoie les nouvelles coordonnées de l'événement au serveur
+     */
     function save(info) {
-        fetch('/api/move_event', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:info.event.id, start:info.event.start.toISOString(), end:info.event.end.toISOString()})})
+        fetch('/api/move_event', {
+            method:'POST', 
+            headers:{'Content-Type':'application/json'}, 
+            body:JSON.stringify({
+                id:info.event.id, 
+                start:info.event.start.toISOString(), 
+                end:info.event.end.toISOString()
+            })
+        })
         .then(r=>r.json()).then(d=>{ if(d.status==='conflict'){ alert('⛔ CONFLIT !'); info.revert(); } });
     }
 
+    /**
+     * Utilitaire pour formater les dates JS au format YYYY-MM-DDThh:mm (requis pour HTML5)
+     */
     function toIsoString(date) {
         var tzo = -date.getTimezoneOffset(), pad = function(num) { return (num < 10 ? '0' : '') + num; };
         return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + 'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
@@ -263,6 +303,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     cal.render();
 });
+
+/**
+ * Confirmation avant soumission du formulaire de suppression
+ */
 function confirmerSuppression() { if(confirm("Supprimer définitivement ?")) { document.getElementById('formDelete').submit(); } }
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
