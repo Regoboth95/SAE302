@@ -4,51 +4,84 @@ from datetime import datetime
 import re 
 import socket
 
-# Configuration des cibles 
+# ==============================================================================
+# CONFIGURATION RÉSEAU (CLIENT/SERVEUR)
+# ==============================================================================
+# Ces constantes définissent les cibles pour les logs et notifications.
 SERVEUR_IP = "127.0.0.1" # localhost 
-PORT_TCP_LOGS = 9000 
-PORT_UDP_NOTIFS = 9001
+PORT_TCP_LOGS = 9000     # Port pour les logs critiques (TCP)
+PORT_UDP_NOTIFS = 9001   # Port pour les notifications rapides (UDP)
 
 def envoyer_tcp_critique(message):
-    """Envoie un message important via TCP (fiable, connecté)"""
+    """
+    Envoie un message important via le protocole TCP.
+    
+    Le TCP est utilisé ici car il garantit la livraison des paquets (fiable).
+    Idéal pour les logs de sécurité ou les actions administratives critiques.
+    
+    Args:
+        message (str): Le contenu du log à envoyer.
+    """
     try:
-        # Création socket TCP
+        # Création d'un socket en mode connecté (TCP - SOCK_STREAM)
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((SERVEUR_IP, PORT_TCP_LOGS))
         s.send(message.encode('utf-8'))
         s.close()
     except Exception as e:
+        # En production, on pourrait logger cette erreur dans un fichier local
         print(f"Erreur envoi TCP: {e}")
 
 def envoyer_udp_rapide(message):
-    """Envoie une notification légère via UDP (non connecté, rapide)"""
+    """
+    Envoie une notification légère via le protocole UDP.
+    
+    L'UDP est utilisé pour la vitesse (pas de connexion préalable).
+    Si le paquet est perdu, ce n'est pas critique pour l'application.
+    Idéal pour le temps réel (notifications UI, mouvements).
+    
+    Args:
+        message (str): La notification à diffuser.
+    """
     try:
-        # Création socket UDP
+        # Création d'un socket en mode non-connecté (UDP - SOCK_DGRAM)
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.sendto(message.encode('utf-8'), (SERVEUR_IP, PORT_UDP_NOTIFS)) # [cite: 923]
+        s.sendto(message.encode('utf-8'), (SERVEUR_IP, PORT_UDP_NOTIFS))
         s.close()
     except:
-        pass # UDP ne garantit pas l'arrivée, on ignore les erreurs
+        pass # UDP ne garantit pas l'arrivée, on ignore silencieusement les erreurs
 
+# ==============================================================================
+# INITIALISATION FLASK
+# ==============================================================================
 app = Flask(__name__)
 app.secret_key = 'cle_secrete_projet_agenda'
 
+# Instanciation unique de la connexion BDD pour l'application
 bdd = BaseDeDonnees()
 
 # ==========================================
-# 1. AUTH & DASHBOARD
+# 1. AUTHENTIFICATION & DASHBOARD
 # ==========================================
+
 @app.route('/')
 def index():
+    """
+    Page d'accueil (Dashboard).
+    Redirige vers le login si l'utilisateur n'est pas connecté.
+    Sinon, affiche la liste des agendas.
+    """
     if 'user_id' not in session: return redirect(url_for('login'))
     agendas = bdd.recuperer_agendas_utilisateur(session['user_id'])
     return render_template('dashboard.html', pseudo=session['pseudo'], agendas=agendas)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    """Gère la connexion des utilisateurs (Formulaire + Vérification BDD)."""
     if request.method == 'POST':
         user = bdd.verifier_connexion(request.form['pseudo'], request.form['password'])
         if user:
+            # Stockage en session pour maintenir la connexion
             session['user_id'] = user[0]
             session['pseudo'] = user[1]
             return redirect(url_for('index'))
@@ -57,20 +90,26 @@ def login():
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    """
+    Gère l'inscription des nouveaux utilisateurs.
+    Intègre une validation stricte du mot de passe et un log TCP.
+    """
     if request.method == 'POST':
         pseudo = request.form['pseudo']
         mdp = request.form['password']
         
-        # Vérif Robustesse
+        # Vérification de la robustesse du mot de passe via Regex
+        # Critères : 8 chars min, 1 chiffre, 1 majuscule, 1 caractère spécial
         if len(mdp) < 8 or not re.search(r"\d", mdp) or not re.search(r"[A-Z]", mdp) or not re.search(r"[\W_]", mdp):
             flash("⚠️ Mot de passe faible ! (8 carac, 1 Maj, 1 Chiffre, 1 Symbole)")
             return render_template('login.html', mode='register')
 
-        # Appel BDD
+        # Tentative d'ajout en base
         resultat = bdd.ajouter_utilisateur(pseudo, "User", mdp)
         
         if resultat == "OK":
-            # [TCP] On loggue l'inscription de manière fiable
+            # [TCP] Log critique : Inscription réussie
+            # On utilise TCP pour être sûr que l'admin reçoive l'info
             envoyer_tcp_critique(f"AUTH: Nouvel utilisateur inscrit : {pseudo}")
             
             flash("Compte créé ! Connectez-vous.")
@@ -84,10 +123,12 @@ def register():
 
 @app.route('/changer_mot_de_passe', methods=['POST'])
 def changer_mot_de_passe():
+    """Permet à un utilisateur connecté de modifier son mot de passe."""
     if 'user_id' not in session: return redirect(url_for('login'))
     
     nouveau_mdp = request.form['nouveau_mdp']
     
+    # Réutilisation de la même politique de sécurité (Regex)
     if len(nouveau_mdp) < 8 or not re.search(r"\d", nouveau_mdp) or not re.search(r"[A-Z]", nouveau_mdp) or not re.search(r"[\W_]", nouveau_mdp):
         flash("⚠️ Mot de passe trop faible.")
     else:
@@ -99,19 +140,25 @@ def changer_mot_de_passe():
         else:
             flash("❌ Erreur lors de la modification.")
             
+    # Retour à la page précédente
     return redirect(request.referrer or url_for('index'))
 
 @app.route('/logout')
 def logout():
+    """Déconnecte l'utilisateur en nettoyant la session."""
     session.clear()
     return redirect(url_for('login'))
 
 @app.route('/nouveau_agenda', methods=['POST'])
 def nouveau_agenda():
+    """
+    Crée un nouvel agenda.
+    Envoie un log TCP car la création de ressources est une action structurante.
+    """
     if 'user_id' in session:
         bdd.creer_agenda(request.form['nom_agenda'], session['user_id'])
 
-        # [TCP] Création importante
+        # [TCP] Log critique : Création d'agenda
         envoyer_tcp_critique(f"ADMIN: Agenda '{request.form['nom_agenda']}' créé par ID {session['user_id']}")
 
         flash("Agenda créé !")
@@ -120,11 +167,17 @@ def nouveau_agenda():
 # ==========================================
 # 2. VUE AGENDA
 # ==========================================
+
 @app.route('/agenda/<int:id_agenda>')
 def voir_agenda(id_agenda):
+    """
+    Charge la vue principale d'un agenda spécifique.
+    Récupère les équipes, les membres et le rôle de l'utilisateur courant.
+    """
     if 'user_id' not in session: return redirect(url_for('login'))
     infos = bdd.recuperer_infos_membre(session['user_id'], id_agenda)
-    if not infos: return redirect(url_for('index'))
+    if not infos: return redirect(url_for('index')) # Sécurité : Redirection si pas membre
+    
     return render_template('agenda.html', id_agenda=id_agenda, 
                            equipes=bdd.recuperer_equipes(id_agenda), 
                            membres=bdd.recuperer_participants(id_agenda),
@@ -133,8 +186,10 @@ def voir_agenda(id_agenda):
 # ==========================================
 # 3. GESTION ÉQUIPES & MEMBRES
 # ==========================================
+
 @app.route('/agenda/<int:id_agenda>/nouvelle_equipe', methods=['POST'])
 def nouvelle_equipe(id_agenda):
+    """Ajoute une équipe (Réservé aux Administrateurs)."""
     infos = bdd.recuperer_infos_membre(session['user_id'], id_agenda)
     if infos['role'] == 'Administrateur':
         bdd.creer_equipe(request.form['nom_equipe'], request.form['couleur_equipe'], id_agenda)
@@ -142,6 +197,7 @@ def nouvelle_equipe(id_agenda):
 
 @app.route('/agenda/<int:id_agenda>/supprimer_equipe/<int:id_equipe>', methods=['POST'])
 def supprimer_equipe(id_agenda, id_equipe):
+    """Supprime une équipe (Réservé aux Administrateurs)."""
     if 'user_id' not in session: return redirect(url_for('login'))
     infos = bdd.recuperer_infos_membre(session['user_id'], id_agenda)
     if infos['role'] == 'Administrateur':
@@ -152,12 +208,15 @@ def supprimer_equipe(id_agenda, id_equipe):
 
 @app.route('/agenda/<int:id_agenda>/inviter_membre', methods=['POST'])
 def inviter_membre(id_agenda):
+    """Inviter un nouvel utilisateur dans l'agenda."""
     infos = bdd.recuperer_infos_membre(session['user_id'], id_agenda)
     if infos['role'] == 'Collaborateur': return redirect(url_for('voir_agenda', id_agenda=id_agenda))
 
     pseudo = request.form['pseudo_invite']
     role_invite = request.form['role_invite']
     equipe_invite_id = None
+    
+    # Logique d'attribution automatique d'équipe selon le rôle de l'invitant
     if infos['role'] == 'Administrateur':
         val = request.form.get('equipe_invite')
         equipe_invite_id = val if val != "" else None
@@ -169,8 +228,10 @@ def inviter_membre(id_agenda):
 
 @app.route('/agenda/<int:id_agenda>/modifier_membre_equipe', methods=['POST'])
 def modifier_membre_equipe(id_agenda):
+    """Modifie l'équipe d'un membre existant (Réservé Admin)."""
     if 'user_id' not in session: return redirect(url_for('login'))
     infos = bdd.recuperer_infos_membre(session['user_id'], id_agenda)
+    
     if infos['role'] == 'Administrateur':
         id_user_cible = request.form['id_user_cible']
         id_new_equipe = request.form['id_new_equipe']
@@ -186,21 +247,33 @@ def modifier_membre_equipe(id_agenda):
 
 @app.route('/agenda/<int:id_agenda>/supprimer_membre/<int:id_membre>', methods=['POST'])
 def supprimer_membre(id_agenda, id_membre):
+    """
+    Retire un membre de l'agenda.
+    Vérifie les droits (Admin ou Chef d'équipe pour ses subordonnés).
+    """
     infos_moi = bdd.recuperer_infos_membre(session['user_id'], id_agenda)
     infos_cible = bdd.recuperer_infos_membre(id_membre, id_agenda)
     autorise = False
+    
     if infos_moi['role'] == 'Administrateur': autorise = True
     elif infos_moi['role'] == 'Chef d\'équipe':
+        # Un chef ne peut supprimer que les membres de SON équipe (sauf les admins)
         if infos_cible['id_equipe'] == infos_moi['id_equipe'] and infos_cible['role'] != 'Administrateur':
             autorise = True
+            
     if autorise: bdd.supprimer_membre(id_agenda, id_membre)
     return redirect(url_for('voir_agenda', id_agenda=id_agenda))
 
 # ==========================================
-# 4. GESTION ÉVÉNEMENTS
+# 4. GESTION ÉVÉNEMENTS (TICKETS)
 # ==========================================
+
 @app.route('/agenda/<int:id_agenda>/nouvel_evenement', methods=['POST'])
 def nouvel_evenement(id_agenda):
+    """
+    Crée un ticket.
+    Envoie une notification UDP pour avertir rapidement les autres clients (monitoring).
+    """
     infos = bdd.recuperer_infos_membre(session['user_id'], id_agenda)
     if infos['role'] == 'Collaborateur': return redirect(url_for('voir_agenda', id_agenda=id_agenda))
 
@@ -212,7 +285,7 @@ def nouvel_evenement(id_agenda):
                                 request.form['date_debut'], request.form['date_fin'], 
                                 id_agenda, id_equipe_cible, session['user_id'])
     if res == "OK":
-        # [UDP] Notification rapide qu'un ticket est arrivé
+        # [UDP] Notification rapide : Action fréquente, pas besoin de fiabilité 100%
         envoyer_udp_rapide(f"EVENT: Nouveau ticket '{request.form['titre']}' (Agenda {id_agenda})")
     
     if res == "ConflitDetecte": flash("⚠️ Conflit d'horaire !")
@@ -220,6 +293,10 @@ def nouvel_evenement(id_agenda):
 
 @app.route('/agenda/<int:id_agenda>/modifier_evenement_complet', methods=['POST'])
 def modifier_evenement_complet(id_agenda):
+    """
+    Met à jour toutes les informations d'un événement.
+    Vérifie les droits (Admin vs Chef) et les conflits horaires.
+    """
     if 'user_id' not in session: return redirect(url_for('login'))
     infos = bdd.recuperer_infos_membre(session['user_id'], id_agenda)
     id_event = request.form['id_event']
@@ -227,12 +304,13 @@ def modifier_evenement_complet(id_agenda):
     nouvelle_equipe_id = request.form.get('id_equipe')
     if nouvelle_equipe_id == "": nouvelle_equipe_id = None
     
+    # Vérification des permissions
     autorise = False
     if infos['role'] == 'Administrateur': autorise = True
     elif infos['role'] == "Chef d'équipe":
         if eq_event_actuelle == infos['id_equipe'] and eq_event_actuelle is not None:
             autorise = True
-            nouvelle_equipe_id = infos['id_equipe']
+            nouvelle_equipe_id = infos['id_equipe'] # Le chef ne change pas l'équipe
 
     if autorise:
         res = bdd.modifier_infos_evenement(id_event, request.form['titre'], request.form['description'], request.form['date_debut'], request.form['date_fin'], nouvelle_equipe_id, session['user_id'])
@@ -243,12 +321,15 @@ def modifier_evenement_complet(id_agenda):
 
 @app.route('/agenda/<int:id_agenda>/supprimer_evenement_complet/<int:id_event>', methods=['POST'])
 def supprimer_evenement_complet(id_agenda, id_event):
+    """Supprime un événement (Action irréversible)."""
     if 'user_id' not in session: return redirect(url_for('login'))
     infos = bdd.recuperer_infos_membre(session['user_id'], id_agenda)
     eq_event = bdd.recuperer_info_event_basic(id_event)
+    
     autorise = False
     if infos['role'] == 'Administrateur': autorise = True
     elif infos['role'] == "Chef d'équipe" and eq_event == infos['id_equipe']: autorise = True
+    
     if autorise: 
         bdd.supprimer_evenement(id_event)
         flash("Supprimé.")
@@ -256,18 +337,26 @@ def supprimer_evenement_complet(id_agenda, id_event):
     return redirect(url_for('voir_agenda', id_agenda=id_agenda))
 
 # ==========================================
-# 5. API JSON
+# 5. API JSON (AJAX / FULLCALENDAR)
 # ==========================================
+
 @app.route('/api/events/<int:id_agenda>')
 def api_get_events(id_agenda):
+    """
+    API : Renvoie la liste des événements au format JSON pour FullCalendar.
+    Filtre les données selon le rôle de l'utilisateur (Sécurité).
+    """
     if 'user_id' not in session: return jsonify([])
     infos = bdd.recuperer_infos_membre(session['user_id'], id_agenda)
     raw_events = bdd.recuperer_evenements_filtres(id_agenda, infos['role'], infos['id_equipe'])
     json_events = []
+    
     for ev in raw_events:
+        # Détermine si l'utilisateur a le droit de bouger ce ticket (editable)
         is_editable = False
         if infos['role'] == 'Administrateur': is_editable = True
         elif infos['role'] == 'Chef d\'équipe' and ev[5]: is_editable = True 
+        
         json_events.append({
             'id': ev[0], 'title': ev[1], 'start': ev[2].isoformat(), 'end': ev[3].isoformat(),
             'backgroundColor': ev[5] or '#6c757d', 'borderColor': ev[5] or '#6c757d',
@@ -277,11 +366,16 @@ def api_get_events(id_agenda):
 
 @app.route('/api/move_event', methods=['POST'])
 def api_move_event():
+    """
+    API : Gère le déplacement (Drag & Drop).
+    Utilise UDP pour notifier le mouvement en temps réel.
+    """
     if 'user_id' not in session: return jsonify({'status': 'error'})
     data = request.json
     res = bdd.modifier_dates_evenement(data['id'], data['start'][:16].replace('T', ' '), data['end'][:16].replace('T', ' '), session['user_id'])
+    
     if res == "OK": 
-        # UDP] Log très rapide du mouvement
+        # [UDP] Log très rapide du mouvement
         envoyer_udp_rapide(f"MOUVEMENT: Ticket {data['id']} déplacé par User {session['user_id']}")
         return jsonify({'status': 'ok'})
     elif res == "Conflit": return jsonify({'status': 'conflict', 'message': 'Conflit.'})
@@ -289,13 +383,20 @@ def api_move_event():
 
 @app.route('/api/historique/<int:id_agenda>/<int:id_event>')
 def api_get_historique(id_agenda, id_event):
+    """
+    API : Renvoie l'historique (Traçabilité V2) pour un événement.
+    Protégé : un Chef ne voit pas l'historique des tickets qui ne sont pas à lui.
+    """
     if 'user_id' not in session: return jsonify({'status': 'error'})
     infos_moi = bdd.recuperer_infos_membre(session['user_id'], id_agenda)
     equipe_event = bdd.recuperer_info_event_basic(id_event)
+    
     droit_acces = False
     if infos_moi['role'] == 'Administrateur': droit_acces = True
     elif infos_moi['role'] == 'Chef d\'équipe' and equipe_event == infos_moi['id_equipe']: droit_acces = True
+    
     if not droit_acces: return jsonify({'status': 'forbidden', 'data': []})
+    
     historique = bdd.recuperer_historique(id_event)
     data = []
     for h in historique: data.append({'action': h[0], 'details': h[1], 'date': h[2], 'auteur': h[3]})
