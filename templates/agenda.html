@@ -16,7 +16,7 @@
                 <img src="{{ url_for('static', filename='img/AgenColl.png') }}" alt="Logo" class="logo-icon">
                 <a href="{{ url_for('index') }}" class="btn btn-outline-secondary"><i class="fas fa-arrow-left"></i> Retour au menu</a>
             </div>
-        
+            
             <div>
                 <span class="text-muted">Bonjour, </span>
                 <a href="#" data-bs-toggle="modal" data-bs-target="#mChangeMdp" class="fw-bold text-dark text-decoration-none">
@@ -34,6 +34,7 @@
     <div class="row">
         <div class="col-md-3">
             <div class="sidebar-agenda"> 
+                
                 <h5 class="text-primary border-bottom pb-2">Équipes</h5>
                 <ul class="list-group list-group-flush mb-4">
                     {% for e in equipes %}
@@ -201,6 +202,8 @@
 <script>
 /**
  * Ouvre le modal de modification d'équipe pour un membre spécifique
+ * @param {string} idUser - L'ID de l'utilisateur cible
+ * @param {string} idEquipeActuelle - L'ID de son équipe actuelle (pour préselection)
  */
 function openMemberEdit(idUser, idEquipeActuelle) {
     document.getElementById('mem_id_user').value = idUser;
@@ -249,7 +252,7 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('edit_debut').value = start;
             document.getElementById('edit_fin').value = end;
 
-            // Récupération de l'historique via l'API
+            // Récupération de l'historique via l'API (AJAX)
             var histDiv = document.getElementById('histContent');
             histDiv.innerHTML = '<div class="text-center text-muted">...</div>';
             fetch('/api/historique/{{id_agenda}}/' + info.event.id).then(r => r.json()).then(data => {
@@ -266,7 +269,8 @@ document.addEventListener('DOMContentLoaded', function() {
         },
 
         /**
-         * Gestion des chevauchements d'événements (Interdit si même équipe, sauf si 'Général')
+         * Gestion des chevauchements d'événements 
+         * Interdit si même équipe, sauf si 'Général'
          */
         eventOverlap: function(still, moving) { 
             return !(still.extendedProps.equipe === moving.extendedProps.equipe && still.extendedProps.equipe !== 'Général'); 
@@ -294,7 +298,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     /**
-     * Utilitaire pour formater les dates JS au format YYYY-MM-DDThh:mm (requis pour HTML5)
+     * Utilitaire pour formater les dates JS au format YYYY-MM-DDThh:mm (requis pour HTML5 input type="datetime-local")
      */
     function toIsoString(date) {
         var tzo = -date.getTimezoneOffset(), pad = function(num) { return (num < 10 ? '0' : '') + num; };
