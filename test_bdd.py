@@ -1,6 +1,11 @@
 from agenda_collab import BaseDeDonnees
 import random
 
+"""
+Script de test du bon fonctionnementde la BDD
+Note : Ce fichier a été créé en début de phase V1 et n'est plus utile (à archiver)
+"""
+
 def test_backend():
     print("--- 1. Démarrage du test BDD ---")
     bdd = BaseDeDonnees()
