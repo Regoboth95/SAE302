@@ -1,6 +1,20 @@
 from agenda_collab import BaseDeDonnees
 
+"""Script permettant d'implémenter la nouvelle BDD de la V2"""
+
 def initialiser_bdd():
+    """
+    Fonction principale d'initialisation de la base de données.
+    
+    Elle réalise les opérations suivantes :
+    1. Connexion à PostgreSQL.
+    2. Suppression propre de l'existant (DROP CASCADE) pour repartir de zéro.
+    3. Création du schéma 'gestion_agenda' et des tables.
+    4. Insertion des données de référence (Rôles).
+    
+    Cette fonction est critique et doit être exécutée une seule fois lors de l'installation.
+    Attention : Elle efface toutes les données existantes !
+    """
     print("🔌 Connexion à la base de données...")
     bdd = BaseDeDonnees()
     conn = bdd.get_connection()
@@ -11,6 +25,7 @@ def initialiser_bdd():
                 with conn.cursor() as cur:
                     print("🧹 Nettoyage de l'ancienne base (DROP)...")
                     # On reprend la logique de votre fichier SQL : On efface tout pour être propre
+                    # L'ordre de suppression est important pour respecter les contraintes de clés étrangères
                     cur.execute("DROP TABLE IF EXISTS gestion_agenda.HISTORIQUE CASCADE;") # V2
                     cur.execute("DROP TABLE IF EXISTS gestion_agenda.EVENEMENT CASCADE;")
                     cur.execute("DROP TABLE IF EXISTS gestion_agenda.PARTICIPATION CASCADE;")
@@ -22,9 +37,11 @@ def initialiser_bdd():
                     print("🏗️ Création du Schéma et des Tables...")
                     
                     # 1. Configuration du schéma
+                    # Permet d'isoler nos tables du schéma 'public' par défaut
                     cur.execute("CREATE SCHEMA IF NOT EXISTS gestion_agenda;")
 
                     # 2. Table UTILISATEUR
+                    # Stocke les identifiants de connexion
                     cur.execute("""
                         CREATE TABLE gestion_agenda.UTILISATEUR (
                             id_user SERIAL PRIMARY KEY,
@@ -35,6 +52,7 @@ def initialiser_bdd():
                     """)
 
                     # 3. Table ROLE
+                    # Définit les niveaux d'accès (Admin, Chef, Collaborateur)
                     cur.execute("""
                         CREATE TABLE gestion_agenda.ROLE (
                             id_role SERIAL PRIMARY KEY,
@@ -43,6 +61,7 @@ def initialiser_bdd():
                     """)
 
                     # 4. Table AGENDA
+                    # Un agenda est un conteneur principal créé par un utilisateur
                     cur.execute("""
                         CREATE TABLE gestion_agenda.AGENDA (
                             id_agenda SERIAL PRIMARY KEY,
@@ -53,6 +72,7 @@ def initialiser_bdd():
                     """)
 
                     # 5. Table ÉQUIPE
+                    # Permet de regrouper des membres et des tickets sous une même couleur
                     cur.execute("""
                         CREATE TABLE gestion_agenda.EQUIPE (
                             id_equipe SERIAL PRIMARY KEY,
@@ -64,6 +84,7 @@ def initialiser_bdd():
                     """)
 
                     # 6. Table PARTICIPATION
+                    # Table d'association centrale : Qui fait quoi dans quel agenda ?
                     cur.execute("""
                         CREATE TABLE gestion_agenda.PARTICIPATION (
                             id_user INT NOT NULL,
@@ -79,6 +100,7 @@ def initialiser_bdd():
                     """)
 
                     # 7. Table EVENEMENT (Mise à jour pour V1.6 : Suppression équipe = Suppression event)
+                    # Contient les tickets du calendrier
                     cur.execute("""
                         CREATE TABLE gestion_agenda.EVENEMENT (
                             id_event SERIAL PRIMARY KEY,
@@ -97,6 +119,7 @@ def initialiser_bdd():
                     # Note : J'ai mis ON DELETE CASCADE pour l'équipe pour respecter la demande "Supprimer équipe efface tickets"
 
                     # 8. Table HISTORIQUE (NOUVEAUTÉ V2)
+                    # Assure la traçabilité des actions sur les événements
                     cur.execute("""
                         CREATE TABLE gestion_agenda.HISTORIQUE (
                             id_hist SERIAL PRIMARY KEY,
