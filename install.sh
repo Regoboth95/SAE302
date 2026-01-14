@@ -40,6 +40,7 @@ echo -e "\n${YELLOW}--- 2. Configuration PostgreSQL ---${NC}"
 # Cette partie crée l'utilisateur 'app_agenda_user' et la BDD si elles n'existent pas
 if sudo -n true 2>/dev/null || sudo -v 2>/dev/null; then
     echo "Droits Sudo détectés. Vérification du compte et de la BDD..."
+    sudo apt-get install postgresql 2>/dev/null || echo "   -> PSQL déjà installée."
     sudo -u postgres psql -c "CREATE USER app_agenda_user WITH PASSWORD 'Azerty@123';" 2>/dev/null || echo "   -> Utilisateur déjà présent."
     sudo -u postgres psql -c "CREATE DATABASE agenda_collaboratif OWNER app_agenda_user;" 2>/dev/null || echo "   -> Base de données déjà présente."
 else
